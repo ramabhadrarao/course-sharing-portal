@@ -7,6 +7,7 @@ import {
   updateCourse,
   deleteCourse,
   joinCourse,
+  leaveCourse,
   addSection,
   updateSection,
   deleteSection,
@@ -14,14 +15,18 @@ import {
   updateSubsection,
   deleteSubsection,
   uploadFile,
+  deleteUploadedFile,
+  getCourseAnalytics,
   upload
 } from '../controllers/courses.js';
 import { protect, authorize } from '../middleware/auth.js';
 
 const router = express.Router();
 
-// File upload route
+// File upload routes
 router.post('/upload', protect, authorize('faculty', 'admin'), upload.single('file'), uploadFile);
+router.post('/upload-multiple', protect, authorize('faculty', 'admin'), upload.array('files', 5), uploadFile);
+router.delete('/upload/:filename', protect, authorize('faculty', 'admin'), deleteUploadedFile);
 
 // Main course routes
 router
@@ -35,8 +40,12 @@ router
   .put(protect, authorize('faculty', 'admin'), updateCourse)
   .delete(protect, authorize('faculty', 'admin'), deleteCourse);
 
-// Course enrollment
+// Course enrollment routes
 router.post('/:id/join', protect, authorize('student'), joinCourse);
+router.post('/:id/leave', protect, authorize('student'), leaveCourse);
+
+// Course analytics (for faculty/admin)
+router.get('/:id/analytics', protect, authorize('faculty', 'admin'), getCourseAnalytics);
 
 // Section management routes
 router

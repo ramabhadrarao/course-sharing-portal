@@ -1,408 +1,925 @@
-import { create } from 'zustand';
-import axios from 'axios';
+import React, { useEffect, useState } from 'react';
+import { useParams, Link, useNavigate } from 'react-router-dom';
+import { 
+  ArrowLeft, Edit, Trash, Plus, Settings, Users, Calendar, 
+  Play, FileText, Video, Upload, ExternalLink, ChevronDown, 
+  ChevronRight, Clock, BookOpen, AlertCircle, Save, X, 
+  Image as ImageIcon, Link2, Code, Type, Eye, EyeOff
+} from 'lucide-react';
 
-// Types
-export interface Section {
-  _id: string;
-  id: string;
-  title: string;
-  order: number;
-  subsections: Subsection[];
-  createdAt?: string;
-  updatedAt?: string;
-}
+import Button from '../../components/ui/Button';
+import Input from '../../components/ui/Input';
+import { Card, CardContent, CardHeader } from '../../components/ui/Card';
+import RichTextEditor from '../../components/ui/RichTextEditor';
+import FileUpload from '../../components/ui/FileUpload';
+import { useAuthStore } from '../../stores/authStore';
+import { useCourseStore, Section, Subsection } from '../../stores/courseStore';
+import { formatDate } from '../../lib/utils';
 
-export interface Subsection {
-  _id: string;
-  id: string;
-  title: string;
-  content: string;
-  contentType: 'text' | 'video' | 'file' | 'quiz';
-  order: number;
-  fileUrl?: string;
-  videoUrl?: string;
-  createdAt?: string;
-  updatedAt?: string;
-}
+const CourseDetailsPage: React.FC = () => {
+  const { courseId } = useParams<{ courseId: string }>();
+  const navigate = useNavigate();
+  const { user } = useAuthStore();
+  const { 
+    currentCourse, 
+    fetchCourseById, 
+    addSection, 
+    updateSection,
+    deleteSection,
+    addSubsection,
+    updateSubsection,
+    deleteSubsection,
+    updateCourse,
+    deleteCourse,
+    isLoading, 
+    error,
+    clearError
+  } = useCourseStore();
 
-export interface Course {
-  _id: string;
-  id: string;
-  title: string;
-  description: string;
-  slug: string;
-  accessCode: string;
-  coverImage?: string;
-  coverImageUrl?: string;
-  createdBy: {
-    _id: string;
-    id: string;
-    name: string;
-    email: string;
-  };
-  enrolledStudents: number;
-  sections: Section[];
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-}
+  // UI State
+  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+  const [selectedSubsection, setSelectedSubsection] = useState<Subsection | null>(null);
+  const [showAddSection, setShowAddSection] = useState(false);
+  const [showAddSubsection, setShowAddSubsection] = useState<string | null>(null);
+  const [editingSection, setEditingSection] = useState<string | null>(null);
+  const [editingSubsection, setEditingSubsection] = useState<string | null>(null);
+  const [showCourseSettings, setShowCourseSettings] = useState(false);
 
-interface CourseState {
-  courses: Course[];
-  currentCourse: Course | null;
-  isLoading: boolean;
-  error: string | null;
-  
-  // Course CRUD operations
-  fetchCourses: () => Promise<void>;
-  fetchCourseById: (id: string) => Promise<void>;
-  createCourse: (courseData: CreateCourseData) => Promise<Course>;
-  updateCourse: (id: string, courseData: Partial<CreateCourseData>) => Promise<void>;
-  deleteCourse: (id: string) => Promise<void>;
-  joinCourse: (accessCode: string) => Promise<void>;
-  
-  // Section management
-  addSection: (courseId: string, section: CreateSectionData) => Promise<void>;
-  updateSection: (courseId: string, sectionId: string, data: Partial<CreateSectionData>) => Promise<void>;
-  deleteSection: (courseId: string, sectionId: string) => Promise<void>;
-  
-  // Subsection management
-  addSubsection: (courseId: string, sectionId: string, subsection: CreateSubsectionData) => Promise<void>;
-  updateSubsection: (courseId: string, sectionId: string, subsectionId: string, data: Partial<CreateSubsectionData>) => Promise<void>;
-  deleteSubsection: (courseId: string, sectionId: string, subsectionId: string) => Promise<void>;
+  // Form state
+  const [sectionForm, setSectionForm] = useState({ title: '', description: '', order: 1 });
+  const [subsectionForm, setSubsectionForm] = useState({
+    title: '',
+    content: '',
+    contentType: 'text' as 'text' | 'video' | 'file' | 'quiz' | 'embed' | 'link',
+    order: 1,
+    fileUrl: '',
+    videoUrl: '',
+    embedUrl: '',
+    linkUrl: ''
+  });
+  const [courseForm, setCourseForm] = useState({
+    title: '',
+    description: '',
+    shortDescription: '',
+    accessCode: '',
+    coverImage: '',
+    category: '',
+    difficulty: ''
+  });
 
-  // Utility functions
-  clearError: () => void;
-  clearCurrentCourse: () => void;
-}
+  const isFaculty = user?.role === 'faculty' || user?.role === 'admin';
+  const isOwner = isFaculty && currentCourse?.createdBy.id === user?.id;
 
-interface CreateCourseData {
-  title: string;
-  description: string;
-  accessCode: string;
-  coverImage?: string;
-}
-
-interface CreateSectionData {
-  title: string;
-  order: number;
-}
-
-interface CreateSubsectionData {
-  title: string;
-  content: string;
-  contentType: 'text' | 'video' | 'file' | 'quiz';
-  order: number;
-  fileUrl?: string;
-  videoUrl?: string;
-}
-
-// Set base URL for API
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
-
-// Helper function to normalize course data
-const normalizeCourse = (course: any): Course => ({
-  ...course,
-  id: course._id,
-  coverImageUrl: course.coverImage,
-  createdBy: {
-    ...course.createdBy,
-    id: course.createdBy._id
-  },
-  enrolledStudents: Array.isArray(course.enrolledStudents) 
-    ? course.enrolledStudents.length 
-    : course.enrolledStudents || 0,
-  sections: course.sections?.map((section: any) => ({
-    ...section,
-    id: section._id,
-    subsections: section.subsections?.map((subsection: any) => ({
-      ...subsection,
-      id: subsection._id
-    })) || []
-  })) || []
-});
-
-export const useCourseStore = create<CourseState>((set, get) => ({
-  courses: [],
-  currentCourse: null,
-  isLoading: false,
-  error: null,
-
-  clearError: () => set({ error: null }),
-  clearCurrentCourse: () => set({ currentCourse: null }),
-
-  fetchCourses: async () => {
-    set({ isLoading: true, error: null });
-    try {
-      const response = await axios.get(`${API_BASE_URL}/courses`);
-      const courses = response.data.data.map((course: any) => normalizeCourse(course));
-      
-      set({ courses, isLoading: false });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.error || 'Failed to fetch courses';
-      set({ error: errorMessage, isLoading: false });
-      console.error('Fetch courses error:', error);
+  useEffect(() => {
+    if (courseId) {
+      clearError();
+      fetchCourseById(courseId);
     }
-  },
+  }, [courseId, fetchCourseById, clearError]);
 
-  fetchCourseById: async (id: string) => {
-    set({ isLoading: true, error: null });
-    try {
-      const response = await axios.get(`${API_BASE_URL}/courses/${id}`);
-      const course = normalizeCourse(response.data.data);
-      
-      set({ currentCourse: course, isLoading: false });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.error || 'Failed to fetch course';
-      set({ error: errorMessage, isLoading: false, currentCourse: null });
-      console.error('Fetch course by ID error:', error);
-    }
-  },
-
-  createCourse: async (courseData: CreateCourseData) => {
-    set({ isLoading: true, error: null });
-    try {
-      const payload = {
-        title: courseData.title,
-        description: courseData.description,
-        accessCode: courseData.accessCode,
-        coverImage: courseData.coverImage || null
-      };
-
-      const response = await axios.post(`${API_BASE_URL}/courses`, payload);
-      const newCourse = normalizeCourse(response.data.data);
-      
-      set(state => ({ 
-        courses: [...state.courses, newCourse],
-        currentCourse: newCourse,
-        isLoading: false 
-      }));
-      
-      return newCourse;
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.error || 'Failed to create course';
-      set({ error: errorMessage, isLoading: false });
-      console.error('Create course error:', error);
-      throw error;
-    }
-  },
-
-  updateCourse: async (id: string, courseData: Partial<CreateCourseData>) => {
-    set({ isLoading: true, error: null });
-    try {
-      const payload = {
-        title: courseData.title,
-        description: courseData.description,
-        accessCode: courseData.accessCode,
-        coverImage: courseData.coverImage
-      };
-
-      const response = await axios.put(`${API_BASE_URL}/courses/${id}`, payload);
-      const updatedCourse = normalizeCourse(response.data.data);
-      
-      set(state => {
-        const updatedCourses = state.courses.map(course => 
-          course._id === id ? updatedCourse : course
-        );
-        
-        const updatedCurrentCourse = state.currentCourse && state.currentCourse._id === id
-          ? updatedCourse
-          : state.currentCourse;
-        
-        return { 
-          courses: updatedCourses, 
-          currentCourse: updatedCurrentCourse,
-          isLoading: false 
-        };
+  useEffect(() => {
+    if (currentCourse) {
+      setCourseForm({
+        title: currentCourse.title,
+        description: currentCourse.description,
+        shortDescription: currentCourse.shortDescription || '',
+        accessCode: currentCourse.accessCode,
+        coverImage: currentCourse.coverImage || '',
+        category: currentCourse.category,
+        difficulty: currentCourse.difficulty
       });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.error || 'Failed to update course';
-      set({ error: errorMessage, isLoading: false });
-      console.error('Update course error:', error);
-      throw error;
-    }
-  },
-
-  deleteCourse: async (id: string) => {
-    set({ isLoading: true, error: null });
-    try {
-      await axios.delete(`${API_BASE_URL}/courses/${id}`);
       
-      set(state => ({
-        courses: state.courses.filter(course => course._id !== id),
-        currentCourse: state.currentCourse?._id === id ? null : state.currentCourse,
-        isLoading: false
-      }));
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.error || 'Failed to delete course';
-      set({ error: errorMessage, isLoading: false });
-      console.error('Delete course error:', error);
-      throw error;
-    }
-  },
-
-  joinCourse: async (accessCode: string) => {
-    set({ isLoading: true, error: null });
-    try {
-      // Find course by access code first
-      const coursesResponse = await axios.get(`${API_BASE_URL}/courses`);
-      const course = coursesResponse.data.data.find((c: any) => 
-        c.accessCode.toUpperCase() === accessCode.toUpperCase()
-      );
-      
-      if (!course) {
-        throw new Error('Invalid access code');
+      // Auto-expand first section if available
+      if (currentCourse.sections.length > 0) {
+        setExpandedSections(new Set([currentCourse.sections[0].id]));
+        
+        // Auto-select first subsection if available
+        if (currentCourse.sections[0].subsections.length > 0) {
+          setSelectedSubsection(currentCourse.sections[0].subsections[0]);
+        }
       }
-      
-      // Join the course
-      await axios.post(`${API_BASE_URL}/courses/${course._id}/join`, { accessCode });
-      
-      // Refresh courses list
-      await get().fetchCourses();
-      
-      set({ isLoading: false });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.error || 'Failed to join course. Invalid access code.';
-      set({ error: errorMessage, isLoading: false });
-      console.error('Join course error:', error);
-      throw error;
     }
-  },
+  }, [currentCourse]);
 
-  // Section management
-  addSection: async (courseId: string, sectionData: CreateSectionData) => {
-    set({ isLoading: true, error: null });
-    try {
-      console.log('Adding section:', sectionData);
-      const response = await axios.post(`${API_BASE_URL}/courses/${courseId}/sections`, sectionData);
-      const updatedCourse = normalizeCourse(response.data.data);
-      
-      set(state => ({
-        currentCourse: updatedCourse,
-        courses: state.courses.map(course => 
-          course._id === courseId ? updatedCourse : course
-        ),
-        isLoading: false
-      }));
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.error || 'Failed to add section';
-      set({ error: errorMessage, isLoading: false });
-      console.error('Add section error:', error);
-      throw error;
+  const toggleSectionExpansion = (sectionId: string) => {
+    const newExpanded = new Set(expandedSections);
+    if (newExpanded.has(sectionId)) {
+      newExpanded.delete(sectionId);
+    } else {
+      newExpanded.add(sectionId);
     }
-  },
+    setExpandedSections(newExpanded);
+  };
 
-  updateSection: async (courseId: string, sectionId: string, data: Partial<CreateSectionData>) => {
-    set({ isLoading: true, error: null });
+  const handleAddSection = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!courseId) return;
+    
     try {
-      const response = await axios.put(`${API_BASE_URL}/courses/${courseId}/sections/${sectionId}`, data);
-      const updatedCourse = normalizeCourse(response.data.data);
-      
-      set(state => ({
-        currentCourse: updatedCourse,
-        courses: state.courses.map(course => 
-          course._id === courseId ? updatedCourse : course
-        ),
-        isLoading: false
-      }));
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.error || 'Failed to update section';
-      set({ error: errorMessage, isLoading: false });
-      console.error('Update section error:', error);
-      throw error;
+      await addSection(courseId, sectionForm);
+      setShowAddSection(false);
+      setSectionForm({ title: '', description: '', order: 1 });
+    } catch (error) {
+      console.error('Failed to add section:', error);
     }
-  },
+  };
 
-  deleteSection: async (courseId: string, sectionId: string) => {
-    set({ isLoading: true, error: null });
+  const handleUpdateSection = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!courseId || !editingSection) return;
+    
     try {
-      const response = await axios.delete(`${API_BASE_URL}/courses/${courseId}/sections/${sectionId}`);
-      const updatedCourse = normalizeCourse(response.data.data);
-      
-      set(state => ({
-        currentCourse: updatedCourse,
-        courses: state.courses.map(course => 
-          course._id === courseId ? updatedCourse : course
-        ),
-        isLoading: false
-      }));
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.error || 'Failed to delete section';
-      set({ error: errorMessage, isLoading: false });
-      console.error('Delete section error:', error);
-      throw error;
+      await updateSection(courseId, editingSection, sectionForm);
+      setEditingSection(null);
+      setSectionForm({ title: '', description: '', order: 1 });
+    } catch (error) {
+      console.error('Failed to update section:', error);
     }
-  },
+  };
 
-  // Subsection management
-  addSubsection: async (courseId: string, sectionId: string, subsectionData: CreateSubsectionData) => {
-    set({ isLoading: true, error: null });
+  const handleDeleteSection = async (sectionId: string) => {
+    if (!courseId || !window.confirm('Are you sure you want to delete this section? This will also delete all subsections.')) return;
+    
     try {
-      const response = await axios.post(
-        `${API_BASE_URL}/courses/${courseId}/sections/${sectionId}/subsections`, 
-        subsectionData
-      );
-      const updatedCourse = normalizeCourse(response.data.data);
-      
-      set(state => ({
-        currentCourse: updatedCourse,
-        courses: state.courses.map(course => 
-          course._id === courseId ? updatedCourse : course
-        ),
-        isLoading: false
-      }));
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.error || 'Failed to add subsection';
-      set({ error: errorMessage, isLoading: false });
-      console.error('Add subsection error:', error);
-      throw error;
+      await deleteSection(courseId, sectionId);
+    } catch (error) {
+      console.error('Failed to delete section:', error);
     }
-  },
+  };
 
-  updateSubsection: async (courseId: string, sectionId: string, subsectionId: string, data: Partial<CreateSubsectionData>) => {
-    set({ isLoading: true, error: null });
+  const handleAddSubsection = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!courseId || !showAddSubsection) return;
+    
     try {
-      const response = await axios.put(
-        `${API_BASE_URL}/courses/${courseId}/sections/${sectionId}/subsections/${subsectionId}`, 
-        data
-      );
-      const updatedCourse = normalizeCourse(response.data.data);
-      
-      set(state => ({
-        currentCourse: updatedCourse,
-        courses: state.courses.map(course => 
-          course._id === courseId ? updatedCourse : course
-        ),
-        isLoading: false
-      }));
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.error || 'Failed to update subsection';
-      set({ error: errorMessage, isLoading: false });
-      console.error('Update subsection error:', error);
-      throw error;
+      await addSubsection(courseId, showAddSubsection, subsectionForm);
+      setShowAddSubsection(null);
+      resetSubsectionForm();
+    } catch (error) {
+      console.error('Failed to add subsection:', error);
     }
-  },
+  };
 
-  deleteSubsection: async (courseId: string, sectionId: string, subsectionId: string) => {
-    set({ isLoading: true, error: null });
+  const handleUpdateSubsection = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!courseId || !editingSubsection || !selectedSubsection) return;
+    
+    const section = currentCourse?.sections.find(s => 
+      s.subsections.some(sub => sub.id === editingSubsection)
+    );
+    if (!section) return;
+    
     try {
-      const response = await axios.delete(
-        `${API_BASE_URL}/courses/${courseId}/sections/${sectionId}/subsections/${subsectionId}`
-      );
-      const updatedCourse = normalizeCourse(response.data.data);
-      
-      set(state => ({
-        currentCourse: updatedCourse,
-        courses: state.courses.map(course => 
-          course._id === courseId ? updatedCourse : course
-        ),
-        isLoading: false
-      }));
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.error || 'Failed to delete subsection';
-      set({ error: errorMessage, isLoading: false });
-      console.error('Delete subsection error:', error);
-      throw error;
+      await updateSubsection(courseId, section.id, editingSubsection, subsectionForm);
+      setEditingSubsection(null);
+      resetSubsectionForm();
+    } catch (error) {
+      console.error('Failed to update subsection:', error);
     }
-  },
-}));
+  };
+
+  const handleDeleteSubsection = async (sectionId: string, subsectionId: string) => {
+    if (!courseId || !window.confirm('Are you sure you want to delete this content?')) return;
+    
+    try {
+      await deleteSubsection(courseId, sectionId, subsectionId);
+      if (selectedSubsection?.id === subsectionId) {
+        setSelectedSubsection(null);
+      }
+    } catch (error) {
+      console.error('Failed to delete subsection:', error);
+    }
+  };
+
+  const handleUpdateCourse = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!courseId) return;
+    
+    try {
+      await updateCourse(courseId, courseForm);
+      setShowCourseSettings(false);
+    } catch (error) {
+      console.error('Failed to update course:', error);
+    }
+  };
+
+  const handleDeleteCourse = async () => {
+    if (!courseId || !window.confirm('Are you sure you want to delete this entire course? This action cannot be undone.')) return;
+    
+    try {
+      await deleteCourse(courseId);
+      navigate('/courses');
+    } catch (error) {
+      console.error('Failed to delete course:', error);
+    }
+  };
+
+  const resetSubsectionForm = () => {
+    setSubsectionForm({
+      title: '',
+      content: '',
+      contentType: 'text',
+      order: 1,
+      fileUrl: '',
+      videoUrl: '',
+      embedUrl: '',
+      linkUrl: ''
+    });
+  };
+
+  const startEditingSection = (section: Section) => {
+    setSectionForm({ 
+      title: section.title, 
+      description: section.description || '',
+      order: section.order 
+    });
+    setEditingSection(section.id);
+  };
+
+  const startEditingSubsection = (subsection: Subsection) => {
+    setSubsectionForm({
+      title: subsection.title,
+      content: subsection.content,
+      contentType: subsection.contentType,
+      order: subsection.order,
+      fileUrl: subsection.fileUrl || '',
+      videoUrl: subsection.videoUrl || '',
+      embedUrl: subsection.embedUrl || '',
+      linkUrl: subsection.linkUrl || ''
+    });
+    setEditingSubsection(subsection.id);
+  };
+
+  const handleFileUpload = (fileUrl: string, metadata?: any) => {
+    setSubsectionForm(prev => ({ ...prev, fileUrl }));
+  };
+
+  if (isLoading && !currentCourse) {
+    return (
+      <div className="flex justify-center items-center min-h-96">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-600"></div>
+      </div>
+    );
+  }
+
+  if (error && !currentCourse) {
+    return (
+      <div className="text-center py-12">
+        <AlertCircle className="h-12 w-12 text-error-500 mx-auto mb-4" />
+        <h2 className="text-2xl font-bold text-gray-900 mb-4">Course Not Found</h2>
+        <p className="text-gray-600 mb-6">{error}</p>
+        <Button as={Link} to="/courses" icon={<ArrowLeft className="h-5 w-5" />}>
+          Back to Courses
+        </Button>
+      </div>
+    );
+  }
+
+  if (!currentCourse) {
+    return null;
+  }
+
+  return (
+    <div className="animate-fade-in max-w-7xl mx-auto">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
+        <div className="flex items-center space-x-4">
+          <Button
+            as={Link}
+            to="/courses"
+            variant="ghost"
+            icon={<ArrowLeft className="h-5 w-5" />}
+          >
+            Back to Courses
+          </Button>
+        </div>
+        
+        {isOwner && (
+          <div className="mt-4 md:mt-0 flex space-x-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowCourseSettings(true)}
+              icon={<Settings className="h-5 w-5" />}
+            >
+              Course Settings
+            </Button>
+            <Button
+              as={Link}
+              to={`/courses/${courseId}/quizzes`}
+              variant="outline"
+              icon={<BookOpen className="h-5 w-5" />}
+            >
+              Manage Quizzes
+            </Button>
+          </div>
+        )}
+      </div>
+
+      {error && (
+        <div className="bg-error-50 text-error-700 p-3 rounded-md mb-4 flex items-center">
+          <AlertCircle className="h-5 w-5 mr-2" />
+          {error}
+        </div>
+      )}
+
+      {/* Course Info Header */}
+      <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
+        <div className="flex items-start space-x-6">
+          {currentCourse.coverImage && (
+            <img 
+              src={currentCourse.coverImage} 
+              alt={currentCourse.title}
+              className="w-32 h-20 object-cover rounded-lg flex-shrink-0"
+            />
+          )}
+          <div className="flex-1">
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">{currentCourse.title}</h1>
+            <p className="text-gray-600 mb-4">{currentCourse.description}</p>
+            <div className="flex items-center space-x-6 text-sm text-gray-500">
+              <div className="flex items-center">
+                <Users className="h-4 w-4 mr-1" />
+                <span>{currentCourse.enrolledStudentsCount} students</span>
+              </div>
+              <div className="flex items-center">
+                <Calendar className="h-4 w-4 mr-1" />
+                <span>Updated {formatDate(currentCourse.updatedAt)}</span>
+              </div>
+              <div className="flex items-center">
+                <span className="bg-primary-100 text-primary-800 px-2 py-1 rounded-full text-xs font-medium">
+                  {currentCourse.accessCode}
+                </span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs">
+                  {currentCourse.category}
+                </span>
+                <span className="bg-secondary-100 text-secondary-700 px-2 py-1 rounded text-xs">
+                  {currentCourse.difficulty}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Course Content Sidebar */}
+        <div className="lg:col-span-1">
+          <Card>
+            <CardHeader className="flex justify-between items-center">
+              <div>
+                <h2 className="text-xl font-semibold">Course Content</h2>
+                <p className="text-sm text-gray-500 mt-1">
+                  {currentCourse.sections.length} sections • {currentCourse.totalContent} lessons
+                </p>
+              </div>
+              {isOwner && (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setShowAddSection(true)}
+                  icon={<Plus className="h-4 w-4" />}
+                >
+                  Add Section
+                </Button>
+              )}
+            </CardHeader>
+            
+            <CardContent className="p-0">
+              <div className="max-h-96 overflow-y-auto">
+                {currentCourse.sections.map((section, sectionIndex) => (
+                  <div key={section.id} className="border-b border-gray-200 last:border-b-0">
+                    <div className="flex items-center justify-between p-4 hover:bg-gray-50">
+                      <button
+                        onClick={() => toggleSectionExpansion(section.id)}
+                        className="flex items-center flex-1 text-left"
+                      >
+                        {expandedSections.has(section.id) ? (
+                          <ChevronDown className="h-4 w-4 mr-2" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4 mr-2" />
+                        )}
+                        <span className="font-medium">{section.title}</span>
+                        <span className="ml-2 text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded">
+                          {section.subsections.length}
+                        </span>
+                      </button>
+                      
+                      {isOwner && (
+                        <div className="flex space-x-1 ml-2">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => startEditingSection(section)}
+                            icon={<Edit className="h-3 w-3" />}
+                          />
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => handleDeleteSection(section.id)}
+                            icon={<Trash className="h-3 w-3" />}
+                            className="text-error-600 hover:text-error-700"
+                          />
+                        </div>
+                      )}
+                    </div>
+                    
+                    {expandedSections.has(section.id) && (
+                      <div className="pl-6 pb-2">
+                        {section.subsections.map((subsection, subsectionIndex) => (
+                          <button
+                            key={subsection.id}
+                            onClick={() => setSelectedSubsection(subsection)}
+                            className={`w-full text-left p-3 rounded-md mb-1 flex items-center justify-between group ${
+                              selectedSubsection?.id === subsection.id
+                                ? 'bg-primary-50 text-primary-700 border border-primary-200'
+                                : 'hover:bg-gray-50'
+                            }`}
+                          >
+                            <div className="flex items-center">
+                              {subsection.contentType === 'video' && <Play className="h-4 w-4 mr-2" />}
+                              {subsection.contentType === 'file' && <FileText className="h-4 w-4 mr-2" />}
+                              {subsection.contentType === 'text' && <Type className="h-4 w-4 mr-2" />}
+                              {subsection.contentType === 'quiz' && <BookOpen className="h-4 w-4 mr-2" />}
+                              {subsection.contentType === 'embed' && <ExternalLink className="h-4 w-4 mr-2" />}
+                              {subsection.contentType === 'link' && <Link2 className="h-4 w-4 mr-2" />}
+                              <span className="text-sm">{subsection.title}</span>
+                            </div>
+                            
+                            {isOwner && (
+                              <div className="opacity-0 group-hover:opacity-100 flex space-x-1">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    startEditingSubsection(subsection);
+                                  }}
+                                  icon={<Edit className="h-3 w-3" />}
+                                />
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDeleteSubsection(section.id, subsection.id);
+                                  }}
+                                  icon={<Trash className="h-3 w-3" />}
+                                  className="text-error-600 hover:text-error-700"
+                                />
+                              </div>
+                            )}
+                          </button>
+                        ))}
+                        
+                        {isOwner && (
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setShowAddSubsection(section.id)}
+                            icon={<Plus className="h-4 w-4" />}
+                            className="w-full mt-2"
+                          >
+                            Add Content
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Main Content Area */}
+        <div className="lg:col-span-2">
+          {selectedSubsection ? (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xl font-semibold">{selectedSubsection.title}</h3>
+                  <div className="flex items-center space-x-2">
+                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                      selectedSubsection.contentType === 'video' ? 'bg-purple-100 text-purple-800' :
+                      selectedSubsection.contentType === 'file' ? 'bg-blue-100 text-blue-800' :
+                      selectedSubsection.contentType === 'quiz' ? 'bg-yellow-100 text-yellow-800' :
+                      selectedSubsection.contentType === 'embed' ? 'bg-green-100 text-green-800' :
+                      selectedSubsection.contentType === 'link' ? 'bg-indigo-100 text-indigo-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      {selectedSubsection.contentType}
+                    </span>
+                  </div>
+                </div>
+              </CardHeader>
+              
+              <CardContent>
+                {/* Video Content */}
+                {selectedSubsection.contentType === 'video' && selectedSubsection.videoUrl && (
+                  <div className="mb-6">
+                    <iframe
+                      src={selectedSubsection.videoUrl}
+                      className="w-full h-64 md:h-96 rounded-lg"
+                      allowFullScreen
+                      title={selectedSubsection.title}
+                    />
+                  </div>
+                )}
+                
+                {/* File Content */}
+                {selectedSubsection.contentType === 'file' && selectedSubsection.fileUrl && (
+                  <div className="mb-6">
+                    <iframe
+                      src={selectedSubsection.fileUrl}
+                      className="w-full h-96 rounded-lg border"
+                      title={selectedSubsection.title}
+                    />
+                    <div className="mt-2">
+                      <Button
+                        as="a"
+                        href={selectedSubsection.fileUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        variant="outline"
+                        size="sm"
+                        icon={<ExternalLink className="h-4 w-4" />}
+                      >
+                        Open in New Tab
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Embed Content */}
+                {selectedSubsection.contentType === 'embed' && selectedSubsection.embedUrl && (
+                  <div className="mb-6">
+                    <iframe
+                      src={selectedSubsection.embedUrl}
+                      className="w-full h-96 rounded-lg border"
+                      title={selectedSubsection.title}
+                    />
+                  </div>
+                )}
+
+                {/* Link Content */}
+                {selectedSubsection.contentType === 'link' && selectedSubsection.linkUrl && (
+                  <div className="mb-6">
+                    <Button
+                      as="a"
+                      href={selectedSubsection.linkUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      variant="primary"
+                      icon={<ExternalLink className="h-4 w-4" />}
+                    >
+                      Open Link
+                    </Button>
+                  </div>
+                )}
+                
+                {/* Text Content */}
+                <div 
+                  className="prose prose-sm max-w-none"
+                  dangerouslySetInnerHTML={{ __html: selectedSubsection.content }}
+                />
+              </CardContent>
+            </Card>
+          ) : (
+            <Card>
+              <CardContent className="text-center py-12">
+                <BookOpen className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  Select content to view
+                </h3>
+                <p className="text-gray-500">
+                  Choose a lesson from the sidebar to start learning
+                </p>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+      </div>
+
+      {/* Add Section Modal */}
+      {showAddSection && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-semibold mb-4">Add New Section</h3>
+            <form onSubmit={handleAddSection} className="space-y-4">
+              <Input
+                label="Section Title"
+                value={sectionForm.title}
+                onChange={(e) => setSectionForm(prev => ({ ...prev, title: e.target.value }))}
+                required
+                fullWidth
+              />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Description (Optional)
+                </label>
+                <textarea
+                  value={sectionForm.description}
+                  onChange={(e) => setSectionForm(prev => ({ ...prev, description: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                  rows={3}
+                  placeholder="Brief description of this section..."
+                />
+              </div>
+              <div className="flex space-x-3 justify-end">
+                <Button type="button" variant="outline" onClick={() => setShowAddSection(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" icon={<Save className="h-4 w-4" />}>
+                  Add Section
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Section Modal */}
+      {editingSection && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-semibold mb-4">Edit Section</h3>
+            <form onSubmit={handleUpdateSection} className="space-y-4">
+              <Input
+                label="Section Title"
+                value={sectionForm.title}
+                onChange={(e) => setSectionForm(prev => ({ ...prev, title: e.target.value }))}
+                required
+                fullWidth
+              />
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Description (Optional)
+                </label>
+                <textarea
+                  value={sectionForm.description}
+                  onChange={(e) => setSectionForm(prev => ({ ...prev, description: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                  rows={3}
+                  placeholder="Brief description of this section..."
+                />
+              </div>
+              <div className="flex space-x-3 justify-end">
+                <Button type="button" variant="outline" onClick={() => setEditingSection(null)}>
+                  Cancel
+                </Button>
+                <Button type="submit" icon={<Save className="h-4 w-4" />}>
+                  Save Changes
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add/Edit Subsection Modal */}
+      {(showAddSubsection || editingSubsection) && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold mb-4">
+              {editingSubsection ? 'Edit Content' : 'Add New Content'}
+            </h3>
+            
+            <form onSubmit={editingSubsection ? handleUpdateSubsection : handleAddSubsection} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input
+                  label="Content Title"
+                  value={subsectionForm.title}
+                  onChange={(e) => setSubsectionForm(prev => ({ ...prev, title: e.target.value }))}
+                  required
+                  fullWidth
+                />
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Content Type
+                  </label>
+                  <select
+                    value={subsectionForm.contentType}
+                    onChange={(e) => setSubsectionForm(prev => ({ 
+                      ...prev, 
+                      contentType: e.target.value as 'text' | 'video' | 'file' | 'quiz' | 'embed' | 'link'
+                    }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                  >
+                    <option value="text">Text/Article</option>
+                    <option value="video">Video</option>
+                    <option value="file">File/Document</option>
+                    <option value="embed">External Embed</option>
+                    <option value="link">External Link</option>
+                    <option value="quiz">Quiz</option>
+                  </select>
+                </div>
+              </div>
+              
+              {/* Video URL Input */}
+              {subsectionForm.contentType === 'video' && (
+                <Input
+                  label="Video URL"
+                  placeholder="https://www.youtube.com/watch?v=..."
+                  value={subsectionForm.videoUrl}
+                  onChange={(e) => setSubsectionForm(prev => ({ ...prev, videoUrl: e.target.value }))}
+                  helperText="YouTube, Vimeo, or direct video file URLs"
+                  fullWidth
+                />
+              )}
+              
+              {/* File Upload */}
+              {subsectionForm.contentType === 'file' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Upload File or Enter URL
+                  </label>
+                  <FileUpload onFileUpload={handleFileUpload} />
+                  <div className="mt-4">
+                    <Input
+                      label="Or enter file URL"
+                      placeholder="https://drive.google.com/file/d/..."
+                      value={subsectionForm.fileUrl}
+                      onChange={(e) => setSubsectionForm(prev => ({ ...prev, fileUrl: e.target.value }))}
+                      helperText="Google Drive, Dropbox, or direct file URLs"
+                      fullWidth
+                    />
+                  </div>
+                </div>
+              )}
+
+              {/* Embed URL Input */}
+              {subsectionForm.contentType === 'embed' && (
+                <Input
+                  label="Embed URL"
+                  placeholder="https://example.com/embed/..."
+                  value={subsectionForm.embedUrl}
+                  onChange={(e) => setSubsectionForm(prev => ({ ...prev, embedUrl: e.target.value }))}
+                  helperText="URL for embedded content (iframes, widgets, etc.)"
+                  fullWidth
+                />
+              )}
+
+              {/* Link URL Input */}
+              {subsectionForm.contentType === 'link' && (
+                <Input
+                  label="Link URL"
+                  placeholder="https://example.com"
+                  value={subsectionForm.linkUrl}
+                  onChange={(e) => setSubsectionForm(prev => ({ ...prev, linkUrl: e.target.value }))}
+                  helperText="External website or resource URL"
+                  fullWidth
+                />
+              )}
+              
+              {/* Rich Text Editor */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Content
+                </label>
+                <RichTextEditor
+                  value={subsectionForm.content}
+                  onChange={(content) => setSubsectionForm(prev => ({ ...prev, content }))}
+                  placeholder="Write your content here..."
+                />
+              </div>
+              
+              <div className="flex space-x-3 justify-end">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => {
+                    setShowAddSubsection(null);
+                    setEditingSubsection(null);
+                    resetSubsectionForm();
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" icon={<Save className="h-4 w-4" />}>
+                  {editingSubsection ? 'Save Changes' : 'Add Content'}
+                </Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Course Settings Modal */}
+      {showCourseSettings && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full">
+            <h3 className="text-lg font-semibold mb-4">Course Settings</h3>
+            
+            <form onSubmit={handleUpdateCourse} className="space-y-4">
+              <Input
+                label="Course Title"
+                value={courseForm.title}
+                onChange={(e) => setCourseForm(prev => ({ ...prev, title: e.target.value }))}
+                required
+                fullWidth
+              />
+              
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Description
+                </label>
+                <textarea
+                  value={courseForm.description}
+                  onChange={(e) => setCourseForm(prev => ({ ...prev, description: e.target.value }))}
+                  rows={4}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                  required
+                />
+              </div>
+
+              <Input
+                label="Short Description"
+                value={courseForm.shortDescription}
+                onChange={(e) => setCourseForm(prev => ({ ...prev, shortDescription: e.target.value }))}
+                fullWidth
+              />
+              
+              <Input
+                label="Access Code"
+                value={courseForm.accessCode}
+                onChange={(e) => setCourseForm(prev => ({ ...prev, accessCode: e.target.value }))}
+                required
+                fullWidth
+              />
+              
+              <Input
+                label="Cover Image URL"
+                value={courseForm.coverImage}
+                onChange={(e) => setCourseForm(prev => ({ ...prev, coverImage: e.target.value }))}
+                fullWidth
+              />
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Category
+                  </label>
+                  <select
+                    value={courseForm.category}
+                    onChange={(e) => setCourseForm(prev => ({ ...prev, category: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                  >
+                    <option value="Computer Science">Computer Science</option>
+                    <option value="Mathematics">Mathematics</option>
+                    <option value="Physics">Physics</option>
+                    <option value="Chemistry">Chemistry</option>
+                    <option value="Biology">Biology</option>
+                    <option value="Engineering">Engineering</option>
+                    <option value="Business">Business</option>
+                    <option value="Arts">Arts</option>
+                    <option value="Language">Language</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Difficulty
+                  </label>
+                  <select
+                    value={courseForm.difficulty}
+                    onChange={(e) => setCourseForm(prev => ({ ...prev, difficulty: e.target.value }))}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                  >
+                    <option value="Beginner">Beginner</option>
+                    <option value="Intermediate">Intermediate</option>
+                    <option value="Advanced">Advanced</option>
+                  </select>
+                </div>
+              </div>
+              
+              <div className="flex space-x-3 justify-between">
+                <Button 
+                  type="button" 
+                  variant="danger"
+                  onClick={handleDeleteCourse}
+                  icon={<Trash className="h-4 w-4" />}
+                >
+                  Delete Course
+                </Button>
+                
+                <div className="flex space-x-3">
+                  <Button type="button" variant="outline" onClick={() => setShowCourseSettings(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" icon={<Save className="h-4 w-4" />}>
+                    Save Changes
+                  </Button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default CourseDetailsPage;

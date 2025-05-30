@@ -6,8 +6,10 @@ export interface Section {
   _id: string;
   id: string;
   title: string;
+  description?: string;
   order: number;
   subsections: Subsection[];
+  isActive: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -17,10 +19,20 @@ export interface Subsection {
   id: string;
   title: string;
   content: string;
-  contentType: 'text' | 'video' | 'file' | 'quiz';
+  contentType: 'text' | 'video' | 'file' | 'quiz' | 'embed' | 'link';
   order: number;
   fileUrl?: string;
   videoUrl?: string;
+  embedUrl?: string;
+  linkUrl?: string;
+  metadata?: {
+    fileName?: string;
+    fileSize?: number;
+    mimeType?: string;
+    duration?: number;
+    description?: string;
+  };
+  isActive: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -29,20 +41,42 @@ export interface Course {
   _id: string;
   id: string;
   title: string;
-  description: string;
   slug: string;
+  description: string;
+  shortDescription?: string;
   accessCode: string;
   coverImage?: string;
-  coverImageUrl?: string;
+  category: string;
+  difficulty: string;
+  duration: number;
+  prerequisites?: string[];
+  learningOutcomes?: string[];
+  tags?: string[];
   createdBy: {
     _id: string;
     id: string;
     name: string;
     email: string;
   };
-  enrolledStudents: number;
+  enrolledStudents: string[];
+  enrolledStudentsCount: number;
   sections: Section[];
   isActive: boolean;
+  isPublished: boolean;
+  publishedAt?: string;
+  settings: {
+    allowComments: boolean;
+    allowDownloads: boolean;
+    requireApproval: boolean;
+  };
+  analytics: {
+    totalViews: number;
+    totalCompletions: number;
+    averageRating: number;
+    totalRatings: number;
+  };
+  totalContent: number;
+  estimatedDuration: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -54,12 +88,13 @@ interface CourseState {
   error: string | null;
   
   // Course CRUD operations
-  fetchCourses: () => Promise<void>;
+  fetchCourses: (params?: SearchParams) => Promise<void>;
   fetchCourseById: (id: string) => Promise<void>;
   createCourse: (courseData: CreateCourseData) => Promise<Course>;
   updateCourse: (id: string, courseData: Partial<CreateCourseData>) => Promise<void>;
   deleteCourse: (id: string) => Promise<void>;
   joinCourse: (accessCode: string) => Promise<void>;
+  leaveCourse: (courseId: string) => Promise<void>;
   
   // Section management
   addSection: (courseId: string, section: CreateSectionData) => Promise<void>;
@@ -76,25 +111,49 @@ interface CourseState {
   clearCurrentCourse: () => void;
 }
 
+interface SearchParams {
+  search?: string;
+  category?: string;
+  difficulty?: string;
+  page?: number;
+  limit?: number;
+}
+
 interface CreateCourseData {
   title: string;
   description: string;
+  shortDescription?: string;
   accessCode: string;
   coverImage?: string;
+  category?: string;
+  difficulty?: string;
+  prerequisites?: string[];
+  learningOutcomes?: string[];
+  tags?: string[];
 }
 
 interface CreateSectionData {
   title: string;
+  description?: string;
   order: number;
 }
 
 interface CreateSubsectionData {
   title: string;
   content: string;
-  contentType: 'text' | 'video' | 'file' | 'quiz';
+  contentType: 'text' | 'video' | 'file' | 'quiz' | 'embed' | 'link';
   order: number;
   fileUrl?: string;
   videoUrl?: string;
+  embedUrl?: string;
+  linkUrl?: string;
+  metadata?: {
+    fileName?: string;
+    fileSize?: number;
+    mimeType?: string;
+    duration?: number;
+    description?: string;
+  };
 }
 
 // Set base URL for API
@@ -104,14 +163,13 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/
 const normalizeCourse = (course: any): Course => ({
   ...course,
   id: course._id,
-  coverImageUrl: course.coverImage,
   createdBy: {
     ...course.createdBy,
     id: course.createdBy._id
   },
-  enrolledStudents: Array.isArray(course.enrolledStudents) 
+  enrolledStudentsCount: Array.isArray(course.enrolledStudents) 
     ? course.enrolledStudents.length 
-    : course.enrolledStudents || 0,
+    : course.enrolledStudentsCount || 0,
   sections: course.sections?.map((section: any) => ({
     ...section,
     id: section._id,
@@ -131,10 +189,19 @@ export const useCourseStore = create<CourseState>((set, get) => ({
   clearError: () => set({ error: null }),
   clearCurrentCourse: () => set({ currentCourse: null }),
 
-  fetchCourses: async () => {
+  fetchCourses: async (params?: SearchParams) => {
     set({ isLoading: true, error: null });
     try {
-      const response = await axios.get(`${API_BASE_URL}/courses`);
+      const queryParams = new URLSearchParams();
+      
+      if (params?.search) queryParams.append('search', params.search);
+      if (params?.category) queryParams.append('category', params.category);
+      if (params?.difficulty) queryParams.append('difficulty', params.difficulty);
+      if (params?.page) queryParams.append('page', params.page.toString());
+      if (params?.limit) queryParams.append('limit', params.limit.toString());
+
+      const url = `${API_BASE_URL}/courses${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+      const response = await axios.get(url);
       const courses = response.data.data.map((course: any) => normalizeCourse(course));
       
       set({ courses, isLoading: false });
@@ -162,14 +229,7 @@ export const useCourseStore = create<CourseState>((set, get) => ({
   createCourse: async (courseData: CreateCourseData) => {
     set({ isLoading: true, error: null });
     try {
-      const payload = {
-        title: courseData.title,
-        description: courseData.description,
-        accessCode: courseData.accessCode,
-        coverImage: courseData.coverImage || null
-      };
-
-      const response = await axios.post(`${API_BASE_URL}/courses`, payload);
+      const response = await axios.post(`${API_BASE_URL}/courses`, courseData);
       const newCourse = normalizeCourse(response.data.data);
       
       set(state => ({ 
@@ -190,14 +250,7 @@ export const useCourseStore = create<CourseState>((set, get) => ({
   updateCourse: async (id: string, courseData: Partial<CreateCourseData>) => {
     set({ isLoading: true, error: null });
     try {
-      const payload = {
-        title: courseData.title,
-        description: courseData.description,
-        accessCode: courseData.accessCode,
-        coverImage: courseData.coverImage
-      };
-
-      const response = await axios.put(`${API_BASE_URL}/courses/${id}`, payload);
+      const response = await axios.put(`${API_BASE_URL}/courses/${id}`, courseData);
       const updatedCourse = normalizeCourse(response.data.data);
       
       set(state => {
@@ -265,6 +318,23 @@ export const useCourseStore = create<CourseState>((set, get) => ({
       const errorMessage = error.response?.data?.error || 'Failed to join course. Invalid access code.';
       set({ error: errorMessage, isLoading: false });
       console.error('Join course error:', error);
+      throw error;
+    }
+  },
+
+  leaveCourse: async (courseId: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      await axios.post(`${API_BASE_URL}/courses/${courseId}/leave`);
+      
+      // Refresh courses list
+      await get().fetchCourses();
+      
+      set({ isLoading: false });
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.error || 'Failed to leave course';
+      set({ error: errorMessage, isLoading: false });
+      console.error('Leave course error:', error);
       throw error;
     }
   },

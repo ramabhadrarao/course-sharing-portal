@@ -1,21 +1,38 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
+import { useForm, useFieldArray } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { BookOpen, Image as ImageIcon, X, AlertCircle, Upload } from 'lucide-react';
+import { BookOpen, Image as ImageIcon, X, AlertCircle, Upload, Plus, Trash } from 'lucide-react';
 
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import { Card, CardContent, CardHeader } from '../../components/ui/Card';
+import FileUpload from '../../components/ui/FileUpload';
 import { useCourseStore } from '../../stores/courseStore';
 import { generateAccessCode } from '../../lib/utils';
 
 const courseSchema = z.object({
-  title: z.string().min(3, 'Title must be at least 3 characters').max(100, 'Title is too long'),
-  description: z.string().min(10, 'Description must be at least 10 characters').max(1000, 'Description is too long'),
-  accessCode: z.string().min(4, 'Access code must be at least 4 characters').max(10, 'Access code is too long'),
-  coverImage: z.string().url('Please enter a valid URL').optional().or(z.literal('')),
+  title: z.string()
+    .min(3, 'Title must be at least 3 characters')
+    .max(200, 'Title cannot exceed 200 characters'),
+  description: z.string()
+    .min(10, 'Description must be at least 10 characters')
+    .max(2000, 'Description cannot exceed 2000 characters'),
+  shortDescription: z.string()
+    .max(500, 'Short description cannot exceed 500 characters')
+    .optional(),
+  accessCode: z.string()
+    .min(4, 'Access code must be at least 4 characters')
+    .max(15, 'Access code cannot exceed 15 characters')
+    .regex(/^[A-Z0-9]+$/, 'Access code can only contain letters and numbers'),
+  coverImage: z.string().optional(),
+  category: z.string().min(1, 'Please select a category'),
+  difficulty: z.string().min(1, 'Please select a difficulty level'),
+  prerequisites: z.array(z.string().min(1, 'Prerequisite cannot be empty')).optional(),
+  learningOutcomes: z.array(z.string().min(1, 'Learning outcome cannot be empty'))
+    .min(1, 'At least one learning outcome is required'),
+  tags: z.array(z.string().min(1, 'Tag cannot be empty')).optional(),
 });
 
 type CourseFormValues = z.infer<typeof courseSchema>;
@@ -25,9 +42,18 @@ const CreateCoursePage: React.FC = () => {
   const { createCourse, isLoading, error } = useCourseStore();
   const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  const categories = [
+    'Computer Science', 'Mathematics', 'Physics', 'Chemistry', 'Biology',
+    'Engineering', 'Business', 'Arts', 'Language', 'Other'
+  ];
+  
+  const difficulties = ['Beginner', 'Intermediate', 'Advanced'];
   
   const {
     register,
+    control,
     handleSubmit,
     watch,
     setValue,
@@ -37,25 +63,64 @@ const CreateCoursePage: React.FC = () => {
     defaultValues: {
       accessCode: generateAccessCode(),
       coverImage: '',
+      category: '',
+      difficulty: '',
+      prerequisites: [],
+      learningOutcomes: [''],
+      tags: [],
     },
+  });
+  
+  const {
+    fields: prerequisiteFields,
+    append: appendPrerequisite,
+    remove: removePrerequisite,
+  } = useFieldArray({
+    control,
+    name: 'prerequisites',
+  });
+  
+  const {
+    fields: outcomeFields,
+    append: appendOutcome,
+    remove: removeOutcome,
+  } = useFieldArray({
+    control,
+    name: 'learningOutcomes',
+  });
+  
+  const {
+    fields: tagFields,
+    append: appendTag,
+    remove: removeTag,
+  } = useFieldArray({
+    control,
+    name: 'tags',
   });
   
   const coverImageUrl = watch('coverImage');
   
   // Handle form submission
   const onSubmit = async (data: CourseFormValues) => {
+    console.log('Form submitted with data:', data);
     setCreateError(null);
+    setIsSubmitting(true);
+    
     try {
-      console.log('Form data:', data);
-      
       const courseData = {
         title: data.title.trim(),
         description: data.description.trim(),
+        shortDescription: data.shortDescription?.trim() || undefined,
         accessCode: data.accessCode.trim().toUpperCase(),
-        coverImage: data.coverImage?.trim() || undefined
+        coverImage: data.coverImage?.trim() || undefined,
+        category: data.category,
+        difficulty: data.difficulty,
+        prerequisites: data.prerequisites?.filter(p => p.trim()).map(p => p.trim()) || [],
+        learningOutcomes: data.learningOutcomes.filter(o => o.trim()).map(o => o.trim()),
+        tags: data.tags?.filter(t => t.trim()).map(t => t.trim().toLowerCase()) || [],
       };
       
-      console.log('Creating course with data:', courseData);
+      console.log('Creating course with processed data:', courseData);
       
       const newCourse = await createCourse(courseData);
       console.log('Course created successfully:', newCourse);
@@ -64,7 +129,9 @@ const CreateCoursePage: React.FC = () => {
       navigate(`/courses/${newCourse.id}`);
     } catch (error: any) {
       console.error('Create course error:', error);
-      setCreateError(error.message || 'Failed to create course');
+      setCreateError(error.response?.data?.error || error.message || 'Failed to create course');
+    } finally {
+      setIsSubmitting(false);
     }
   };
   
@@ -78,7 +145,14 @@ const CreateCoursePage: React.FC = () => {
     'https://images.pexels.com/photos/270348/pexels-photo-270348.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
   ];
   
-  // Set image preview
+  // Handle file upload for cover image
+  const handleFileUpload = (fileUrl: string, metadata?: any) => {
+    console.log('File uploaded:', fileUrl, metadata);
+    setValue('coverImage', fileUrl, { shouldValidate: true });
+    setCoverImagePreview(fileUrl);
+  };
+  
+  // Set image preview from URL
   const handleImageChange = (url: string) => {
     console.log('Setting image URL:', url);
     setValue('coverImage', url, { shouldValidate: true });
@@ -106,13 +180,18 @@ const CreateCoursePage: React.FC = () => {
       setCoverImagePreview(null);
     }
   }, [coverImageUrl]);
+
+  // Handle navigation back
+  const handleCancel = () => {
+    navigate('/courses');
+  };
   
   return (
-    <div className="max-w-4xl mx-auto animate-fade-in">
+    <div className="max-w-6xl mx-auto animate-fade-in">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">Create a New Course</h1>
         <p className="text-gray-600 mt-1">
-          Create a new course to share with your students
+          Create a comprehensive course to share knowledge with your students
         </p>
       </div>
       
@@ -128,12 +207,13 @@ const CreateCoursePage: React.FC = () => {
       )}
       
       <form onSubmit={handleSubmit(onSubmit)}>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Course Details */}
-          <div className="md:col-span-2">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Main Course Details */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Basic Information */}
             <Card>
               <CardHeader>
-                <h2 className="text-xl font-semibold">Course Information</h2>
+                <h2 className="text-xl font-semibold">Basic Information</h2>
               </CardHeader>
               <CardContent className="space-y-4">
                 <Input
@@ -153,13 +233,22 @@ const CreateCoursePage: React.FC = () => {
                       errors.description ? 'border-error-500' : 'border-gray-300'
                     }`}
                     rows={4}
-                    placeholder="Provide a description of your course..."
+                    placeholder="Provide a detailed description of your course..."
                     {...register('description')}
                   />
                   {errors.description && (
                     <p className="mt-1 text-sm text-error-500">{errors.description.message}</p>
                   )}
                 </div>
+                
+                <Input
+                  label="Short Description (Optional)"
+                  error={errors.shortDescription?.message}
+                  placeholder="A brief summary for course listings"
+                  helperText="This will be shown in course cards and search results"
+                  fullWidth
+                  {...register('shortDescription')}
+                />
 
                 <div className="flex space-x-4">
                   <div className="flex-1">
@@ -185,6 +274,183 @@ const CreateCoursePage: React.FC = () => {
                 </div>
               </CardContent>
             </Card>
+            
+            {/* Course Settings */}
+            <Card>
+              <CardHeader>
+                <h2 className="text-xl font-semibold">Course Settings</h2>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Category
+                    </label>
+                    <select
+                      {...register('category')}
+                      className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 ${
+                        errors.category ? 'border-error-500' : 'border-gray-300'
+                      }`}
+                    >
+                      <option value="">Select a category</option>
+                      {categories.map(category => (
+                        <option key={category} value={category}>{category}</option>
+                      ))}
+                    </select>
+                    {errors.category && (
+                      <p className="mt-1 text-sm text-error-500">{errors.category.message}</p>
+                    )}
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Difficulty Level
+                    </label>
+                    <select
+                      {...register('difficulty')}
+                      className={`w-full px-3 py-2 border rounded-md focus:outline-none focus:ring-primary-500 focus:border-primary-500 ${
+                        errors.difficulty ? 'border-error-500' : 'border-gray-300'
+                      }`}
+                    >
+                      <option value="">Select difficulty</option>
+                      {difficulties.map(difficulty => (
+                        <option key={difficulty} value={difficulty}>{difficulty}</option>
+                      ))}
+                    </select>
+                    {errors.difficulty && (
+                      <p className="mt-1 text-sm text-error-500">{errors.difficulty.message}</p>
+                    )}
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            
+            {/* Prerequisites */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-semibold">Prerequisites (Optional)</h2>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => appendPrerequisite('')}
+                    icon={<Plus className="h-4 w-4" />}
+                  >
+                    Add Prerequisite
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {prerequisiteFields.length > 0 ? (
+                  <div className="space-y-3">
+                    {prerequisiteFields.map((field, index) => (
+                      <div key={field.id} className="flex space-x-2">
+                        <Input
+                          placeholder="e.g., Basic programming knowledge"
+                          fullWidth
+                          {...register(`prerequisites.${index}`)}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removePrerequisite(index)}
+                          icon={<Trash className="h-4 w-4" />}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-sm">No prerequisites added yet.</p>
+                )}
+              </CardContent>
+            </Card>
+            
+            {/* Learning Outcomes */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-semibold">Learning Outcomes</h2>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => appendOutcome('')}
+                    icon={<Plus className="h-4 w-4" />}
+                  >
+                    Add Outcome
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {outcomeFields.map((field, index) => (
+                    <div key={field.id} className="flex space-x-2">
+                      <Input
+                        placeholder="e.g., Students will be able to write basic programs"
+                        fullWidth
+                        {...register(`learningOutcomes.${index}`)}
+                      />
+                      {outcomeFields.length > 1 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeOutcome(index)}
+                          icon={<Trash className="h-4 w-4" />}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+                {errors.learningOutcomes && (
+                  <p className="mt-2 text-sm text-error-500">{errors.learningOutcomes.message}</p>
+                )}
+              </CardContent>
+            </Card>
+            
+            {/* Tags */}
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-semibold">Tags (Optional)</h2>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => appendTag('')}
+                    icon={<Plus className="h-4 w-4" />}
+                  >
+                    Add Tag
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                {tagFields.length > 0 ? (
+                  <div className="space-y-3">
+                    {tagFields.map((field, index) => (
+                      <div key={field.id} className="flex space-x-2">
+                        <Input
+                          placeholder="e.g., programming, beginner, web development"
+                          fullWidth
+                          {...register(`tags.${index}`)}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeTag(index)}
+                          icon={<Trash className="h-4 w-4" />}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-gray-500 text-sm">No tags added yet.</p>
+                )}
+              </CardContent>
+            </Card>
           </div>
           
           {/* Cover Image */}
@@ -195,7 +461,7 @@ const CreateCoursePage: React.FC = () => {
               </CardHeader>
               <CardContent>
                 {coverImagePreview ? (
-                  <div className="relative">
+                  <div className="relative mb-4">
                     <img 
                       src={coverImagePreview} 
                       alt="Cover preview" 
@@ -215,19 +481,30 @@ const CreateCoursePage: React.FC = () => {
                     </button>
                   </div>
                 ) : (
-                  <div className="border-2 border-dashed border-gray-300 rounded-md p-6 text-center">
+                  <div className="border-2 border-dashed border-gray-300 rounded-md p-6 text-center mb-4">
                     <ImageIcon className="h-12 w-12 text-gray-400 mx-auto mb-2" />
-                    <p className="text-sm text-gray-500 mb-2">Choose a cover image</p>
+                    <p className="text-sm text-gray-500 mb-2">Upload or choose a cover image</p>
                     <p className="text-xs text-gray-400">Optional but recommended</p>
                   </div>
                 )}
                 
+                {/* File Upload Component */}
+                <div className="mb-4">
+                  <FileUpload 
+                    onFileUpload={handleFileUpload}
+                    accept="image/*"
+                    maxSize={10}
+                    allowExternalUrl={true}
+                    placeholder="Upload image or enter URL"
+                  />
+                </div>
+                
+                {/* Manual URL Input */}
                 <Input
-                  label="Image URL"
+                  label="Or enter image URL"
                   placeholder="https://example.com/image.jpg"
                   error={errors.coverImage?.message}
                   helperText="Enter a direct link to an image"
-                  className="mt-4"
                   fullWidth
                   {...register('coverImage')}
                 />
@@ -258,21 +535,22 @@ const CreateCoursePage: React.FC = () => {
         </div>
         
         {/* Submit Buttons */}
-        <div className="mt-6 flex justify-end space-x-3">
+        <div className="mt-8 flex justify-end space-x-3">
           <Button
             type="button"
             variant="outline"
-            onClick={() => navigate('/courses')}
-            disabled={isLoading}
+            onClick={handleCancel}
+            disabled={isLoading || isSubmitting}
           >
             Cancel
           </Button>
           <Button
             type="submit"
-            isLoading={isLoading}
+            isLoading={isLoading || isSubmitting}
             icon={<BookOpen className="h-5 w-5" />}
+            disabled={isLoading || isSubmitting}
           >
-            Create Course
+            {isSubmitting ? 'Creating Course...' : 'Create Course'}
           </Button>
         </div>
       </form>

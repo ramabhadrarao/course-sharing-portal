@@ -10,7 +10,7 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Configure multer for file uploads
+// Configure multer for file uploads with better organization
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
     const uploadPath = path.join(__dirname, '../public/uploads');
@@ -23,64 +23,177 @@ const storage = multer.diskStorage({
     cb(null, uploadPath);
   },
   filename: function (req, file, cb) {
-    // Generate unique filename
+    // Generate unique filename with timestamp and random string
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+    const extension = path.extname(file.originalname);
+    const basename = path.basename(file.originalname, extension).replace(/[^a-zA-Z0-9]/g, '_');
+    cb(null, `${basename}-${uniqueSuffix}${extension}`);
   }
 });
 
 const fileFilter = (req, file, cb) => {
-  // Allow images, documents, and videos
-  const allowedTypes = /jpeg|jpg|png|gif|pdf|doc|docx|ppt|pptx|mp4|avi|mov/;
-  const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-  const mimetype = allowedTypes.test(file.mimetype);
+  // Allow images, documents, videos, and other educational content
+  const allowedTypes = [
+    // Images
+    'image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp', 'image/svg+xml',
+    // Documents
+    'application/pdf', 
+    'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    'text/plain', 'text/csv',
+    // Videos
+    'video/mp4', 'video/avi', 'video/mov', 'video/wmv', 'video/webm',
+    // Audio
+    'audio/mp3', 'audio/wav', 'audio/ogg', 'audio/m4a',
+    // Archives
+    'application/zip', 'application/x-rar-compressed', 'application/x-7z-compressed'
+  ];
 
-  if (mimetype && extname) {
+  const allowedExtensions = [
+    '.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg',
+    '.pdf', '.doc', '.docx', '.ppt', '.pptx', '.xls', '.xlsx',
+    '.txt', '.csv', '.mp4', '.avi', '.mov', '.wmv', '.webm',
+    '.mp3', '.wav', '.ogg', '.m4a', '.zip', '.rar', '.7z'
+  ];
+
+  const extname = path.extname(file.originalname).toLowerCase();
+  const mimetype = file.mimetype;
+
+  if (allowedTypes.includes(mimetype) || allowedExtensions.includes(extname)) {
     return cb(null, true);
   } else {
-    cb(new Error('Only images, documents, and videos are allowed'));
+    cb(new ErrorResponse(`File type not supported. Allowed types: ${allowedExtensions.join(', ')}`, 400));
   }
 };
 
 export const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 50 * 1024 * 1024, // 50MB limit
+    fileSize: 100 * 1024 * 1024, // 100MB limit
+    files: 5 // Maximum 5 files at once
   },
   fileFilter: fileFilter
 });
 
-// @desc    Upload file
+// @desc    Upload file(s)
 // @route   POST /api/v1/courses/upload
 // @access  Private (Faculty/Admin)
 export const uploadFile = asyncHandler(async (req, res, next) => {
-  if (!req.file) {
+  if (!req.file && !req.files) {
     return next(new ErrorResponse('Please upload a file', 400));
   }
 
-  const fileUrl = `/uploads/${req.file.filename}`;
-  
+  const files = req.files || [req.file];
+  const uploadedFiles = [];
+
+  for (const file of files) {
+    const fileUrl = `/uploads/${file.filename}`;
+    
+    // Get file info
+    const fileInfo = {
+      filename: file.filename,
+      originalName: file.originalname,
+      fileUrl: fileUrl,
+      fileSize: file.size,
+      mimeType: file.mimetype,
+      uploadedAt: new Date(),
+      uploadedBy: req.user.id
+    };
+
+    uploadedFiles.push(fileInfo);
+  }
+
   res.status(200).json({
     success: true,
-    data: {
-      filename: req.file.filename,
-      originalName: req.file.originalname,
-      fileUrl: fileUrl,
-      fileSize: req.file.size,
-      mimeType: req.file.mimetype
-    }
+    count: uploadedFiles.length,
+    data: uploadedFiles.length === 1 ? uploadedFiles[0] : uploadedFiles
   });
+});
+
+// @desc    Delete uploaded file
+// @route   DELETE /api/v1/courses/upload/:filename
+// @access  Private (Faculty/Admin)
+export const deleteUploadedFile = asyncHandler(async (req, res, next) => {
+  const { filename } = req.params;
+  const filePath = path.join(__dirname, '../public/uploads', filename);
+
+  try {
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+    
+    res.status(200).json({
+      success: true,
+      message: 'File deleted successfully'
+    });
+  } catch (error) {
+    return next(new ErrorResponse('Failed to delete file', 500));
+  }
 });
 
 // @desc    Get all courses
 // @route   GET /api/v1/courses
 // @access  Public
 export const getCourses = asyncHandler(async (req, res, next) => {
-  const courses = await Course.find().populate('createdBy', 'name email');
+  // Build query
+  let query = {};
   
+  // Add search functionality
+  if (req.query.search) {
+    query.$or = [
+      { title: { $regex: req.query.search, $options: 'i' } },
+      { description: { $regex: req.query.search, $options: 'i' } },
+      { tags: { $in: [new RegExp(req.query.search, 'i')] } }
+    ];
+  }
+
+  // Add category filter
+  if (req.query.category && req.query.category !== 'all') {
+    query.category = req.query.category;
+  }
+
+  // Add difficulty filter
+  if (req.query.difficulty && req.query.difficulty !== 'all') {
+    query.difficulty = req.query.difficulty;
+  }
+
+  // Only show active courses for non-admin users
+  if (!req.user || req.user.role !== 'admin') {
+    query.isActive = true;
+  }
+
+  // Pagination
+  const page = parseInt(req.query.page, 10) || 1;
+  const limit = parseInt(req.query.limit, 10) || 25;
+  const startIndex = (page - 1) * limit;
+
+  // Sort
+  let sort = {};
+  if (req.query.sort) {
+    const sortField = req.query.sort.replace('-', '');
+    sort[sortField] = req.query.sort.startsWith('-') ? -1 : 1;
+  } else {
+    sort = { updatedAt: -1 }; // Default: newest first
+  }
+
+  const courses = await Course.find(query)
+    .populate('createdBy', 'name email')
+    .sort(sort)
+    .skip(startIndex)
+    .limit(limit);
+
+  const total = await Course.countDocuments(query);
+
   res.status(200).json({
     success: true,
     count: courses.length,
+    total,
+    pagination: {
+      page,
+      limit,
+      pages: Math.ceil(total / limit)
+    },
     data: courses
   });
 });
@@ -89,10 +202,23 @@ export const getCourses = asyncHandler(async (req, res, next) => {
 // @route   GET /api/v1/courses/:id
 // @access  Public
 export const getCourse = asyncHandler(async (req, res, next) => {
-  const course = await Course.findById(req.params.id).populate('createdBy', 'name email');
+  const course = await Course.findById(req.params.id)
+    .populate('createdBy', 'name email')
+    .populate('enrolledStudents', 'name email');
 
   if (!course) {
     return next(new ErrorResponse(`Course not found with id of ${req.params.id}`, 404));
+  }
+
+  // Check if course is active (unless user is admin or owner)
+  if (!course.isActive && req.user && req.user.role !== 'admin' && course.createdBy._id.toString() !== req.user.id) {
+    return next(new ErrorResponse('Course is not available', 404));
+  }
+
+  // Increment view count (if user is not the owner)
+  if (!req.user || course.createdBy._id.toString() !== req.user.id) {
+    course.analytics.totalViews += 1;
+    await course.save();
   }
 
   res.status(200).json({
@@ -106,6 +232,13 @@ export const getCourse = asyncHandler(async (req, res, next) => {
 // @access  Private (Faculty/Admin)
 export const createCourse = asyncHandler(async (req, res, next) => {
   req.body.createdBy = req.user.id;
+
+  // Generate slug if not provided
+  if (!req.body.slug && req.body.title) {
+    req.body.slug = req.body.title.toLowerCase()
+      .replace(/[^a-zA-Z0-9 ]/g, '')
+      .replace(/\s+/g, '-');
+  }
 
   const course = await Course.create(req.body);
   
@@ -131,6 +264,13 @@ export const updateCourse = asyncHandler(async (req, res, next) => {
   // Make sure user is course owner or admin
   if (course.createdBy.toString() !== req.user.id && req.user.role !== 'admin') {
     return next(new ErrorResponse(`User ${req.user.id} is not authorized to update this course`, 401));
+  }
+
+  // Update slug if title changed
+  if (req.body.title && req.body.title !== course.title) {
+    req.body.slug = req.body.title.toLowerCase()
+      .replace(/[^a-zA-Z0-9 ]/g, '')
+      .replace(/\s+/g, '-');
   }
 
   // Update course
@@ -162,24 +302,30 @@ export const deleteCourse = asyncHandler(async (req, res, next) => {
 
   // Delete associated files
   try {
+    const filesToDelete = [];
+    
+    // Collect all file URLs from subsections
     course.sections.forEach(section => {
       section.subsections.forEach(subsection => {
         if (subsection.fileUrl && subsection.fileUrl.startsWith('/uploads/')) {
-          const filePath = path.join(__dirname, '../public', subsection.fileUrl);
-          if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
-          }
+          filesToDelete.push(subsection.fileUrl);
         }
       });
     });
 
-    // Delete course cover image if it's locally stored
+    // Add course cover image
     if (course.coverImage && course.coverImage.startsWith('/uploads/')) {
-      const coverPath = path.join(__dirname, '../public', course.coverImage);
-      if (fs.existsSync(coverPath)) {
-        fs.unlinkSync(coverPath);
-      }
+      filesToDelete.push(course.coverImage);
     }
+
+    // Delete files
+    filesToDelete.forEach(fileUrl => {
+      const filename = path.basename(fileUrl);
+      const filePath = path.join(__dirname, '../public/uploads', filename);
+      if (fs.existsSync(filePath)) {
+        fs.unlinkSync(filePath);
+      }
+    });
   } catch (error) {
     console.log('Error deleting files:', error);
     // Continue with course deletion even if file deletion fails
@@ -199,11 +345,15 @@ export const deleteCourse = asyncHandler(async (req, res, next) => {
 export const joinCourse = asyncHandler(async (req, res, next) => {
   const course = await Course.findOne({ 
     _id: req.params.id,
-    accessCode: req.body.accessCode
+    accessCode: req.body.accessCode.toUpperCase()
   });
 
   if (!course) {
     return next(new ErrorResponse('Invalid course ID or access code', 400));
+  }
+
+  if (!course.isActive) {
+    return next(new ErrorResponse('Course is not available for enrollment', 400));
   }
 
   if (course.enrolledStudents.includes(req.user.id)) {
@@ -215,7 +365,32 @@ export const joinCourse = asyncHandler(async (req, res, next) => {
 
   res.status(200).json({
     success: true,
+    message: 'Successfully joined the course',
     data: course
+  });
+});
+
+// @desc    Leave course
+// @route   POST /api/v1/courses/:id/leave
+// @access  Private (Student)
+export const leaveCourse = asyncHandler(async (req, res, next) => {
+  const course = await Course.findById(req.params.id);
+
+  if (!course) {
+    return next(new ErrorResponse(`Course not found with id of ${req.params.id}`, 404));
+  }
+
+  if (!course.enrolledStudents.includes(req.user.id)) {
+    return next(new ErrorResponse('You are not enrolled in this course', 400));
+  }
+
+  course.enrolledStudents.pull(req.user.id);
+  await course.save();
+
+  res.status(200).json({
+    success: true,
+    message: 'Successfully left the course',
+    data: {}
   });
 });
 
@@ -234,12 +409,15 @@ export const addSection = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse(`User ${req.user.id} is not authorized to update this course`, 401));
   }
 
-  course.sections.push({
+  const newSection = {
     title: req.body.title,
+    description: req.body.description || '',
     order: req.body.order || course.sections.length + 1,
-    subsections: []
-  });
+    subsections: [],
+    isActive: req.body.isActive !== undefined ? req.body.isActive : true
+  };
 
+  course.sections.push(newSection);
   await course.save();
   await course.populate('createdBy', 'name email');
 
@@ -269,8 +447,11 @@ export const updateSection = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse(`Section not found with id of ${req.params.sectionId}`, 404));
   }
 
-  section.title = req.body.title || section.title;
-  section.order = req.body.order || section.order;
+  // Update section fields
+  if (req.body.title !== undefined) section.title = req.body.title;
+  if (req.body.description !== undefined) section.description = req.body.description;
+  if (req.body.order !== undefined) section.order = req.body.order;
+  if (req.body.isActive !== undefined) section.isActive = req.body.isActive;
 
   await course.save();
   await course.populate('createdBy', 'name email');
@@ -305,7 +486,8 @@ export const deleteSection = asyncHandler(async (req, res, next) => {
   try {
     section.subsections.forEach(subsection => {
       if (subsection.fileUrl && subsection.fileUrl.startsWith('/uploads/')) {
-        const filePath = path.join(__dirname, '../public', subsection.fileUrl);
+        const filename = path.basename(subsection.fileUrl);
+        const filePath = path.join(__dirname, '../public/uploads', filename);
         if (fs.existsSync(filePath)) {
           fs.unlinkSync(filePath);
         }
@@ -345,22 +527,26 @@ export const addSubsection = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse(`Section not found with id of ${req.params.sectionId}`, 404));
   }
 
-  // Process YouTube URL to embed format
+  // Process different URL types
   let processedVideoUrl = req.body.videoUrl;
-  if (processedVideoUrl && processedVideoUrl.includes('youtube.com/watch')) {
-    const videoId = processedVideoUrl.split('v=')[1]?.split('&')[0];
-    if (videoId) {
-      processedVideoUrl = `https://www.youtube.com/embed/${videoId}`;
-    }
-  } else if (processedVideoUrl && processedVideoUrl.includes('youtu.be/')) {
-    const videoId = processedVideoUrl.split('youtu.be/')[1]?.split('?')[0];
-    if (videoId) {
-      processedVideoUrl = `https://www.youtube.com/embed/${videoId}`;
+  let processedFileUrl = req.body.fileUrl;
+
+  // Process YouTube URL to embed format
+  if (processedVideoUrl) {
+    if (processedVideoUrl.includes('youtube.com/watch')) {
+      const videoId = processedVideoUrl.split('v=')[1]?.split('&')[0];
+      if (videoId) {
+        processedVideoUrl = `https://www.youtube.com/embed/${videoId}`;
+      }
+    } else if (processedVideoUrl.includes('youtu.be/')) {
+      const videoId = processedVideoUrl.split('youtu.be/')[1]?.split('?')[0];
+      if (videoId) {
+        processedVideoUrl = `https://www.youtube.com/embed/${videoId}`;
+      }
     }
   }
 
   // Process Google Drive URL to direct view format
-  let processedFileUrl = req.body.fileUrl;
   if (processedFileUrl && processedFileUrl.includes('drive.google.com')) {
     if (processedFileUrl.includes('/file/d/')) {
       const fileId = processedFileUrl.split('/file/d/')[1]?.split('/')[0];
@@ -370,17 +556,20 @@ export const addSubsection = asyncHandler(async (req, res, next) => {
     }
   }
 
-  section.subsections.push({
+  const newSubsection = {
     title: req.body.title,
-    content: req.body.content,
-    contentType: req.body.contentType,
+    content: req.body.content || '',
+    contentType: req.body.contentType || 'text',
     order: req.body.order || section.subsections.length + 1,
     fileUrl: processedFileUrl,
     videoUrl: processedVideoUrl,
     embedUrl: req.body.embedUrl,
-    metadata: req.body.metadata
-  });
+    linkUrl: req.body.linkUrl,
+    metadata: req.body.metadata || {},
+    isActive: req.body.isActive !== undefined ? req.body.isActive : true
+  };
 
+  section.subsections.push(newSubsection);
   await course.save();
   await course.populate('createdBy', 'name email');
 
@@ -417,19 +606,22 @@ export const updateSubsection = asyncHandler(async (req, res, next) => {
 
   // Process URLs similar to add subsection
   let processedVideoUrl = req.body.videoUrl;
-  if (processedVideoUrl && processedVideoUrl.includes('youtube.com/watch')) {
-    const videoId = processedVideoUrl.split('v=')[1]?.split('&')[0];
-    if (videoId) {
-      processedVideoUrl = `https://www.youtube.com/embed/${videoId}`;
-    }
-  } else if (processedVideoUrl && processedVideoUrl.includes('youtu.be/')) {
-    const videoId = processedVideoUrl.split('youtu.be/')[1]?.split('?')[0];
-    if (videoId) {
-      processedVideoUrl = `https://www.youtube.com/embed/${videoId}`;
+  let processedFileUrl = req.body.fileUrl;
+
+  if (processedVideoUrl) {
+    if (processedVideoUrl.includes('youtube.com/watch')) {
+      const videoId = processedVideoUrl.split('v=')[1]?.split('&')[0];
+      if (videoId) {
+        processedVideoUrl = `https://www.youtube.com/embed/${videoId}`;
+      }
+    } else if (processedVideoUrl.includes('youtu.be/')) {
+      const videoId = processedVideoUrl.split('youtu.be/')[1]?.split('?')[0];
+      if (videoId) {
+        processedVideoUrl = `https://www.youtube.com/embed/${videoId}`;
+      }
     }
   }
 
-  let processedFileUrl = req.body.fileUrl;
   if (processedFileUrl && processedFileUrl.includes('drive.google.com')) {
     if (processedFileUrl.includes('/file/d/')) {
       const fileId = processedFileUrl.split('/file/d/')[1]?.split('/')[0];
@@ -439,14 +631,17 @@ export const updateSubsection = asyncHandler(async (req, res, next) => {
     }
   }
 
-  subsection.title = req.body.title || subsection.title;
-  subsection.content = req.body.content || subsection.content;
-  subsection.contentType = req.body.contentType || subsection.contentType;
-  subsection.order = req.body.order || subsection.order;
-  subsection.fileUrl = processedFileUrl !== undefined ? processedFileUrl : subsection.fileUrl;
-  subsection.videoUrl = processedVideoUrl !== undefined ? processedVideoUrl : subsection.videoUrl;
-  subsection.embedUrl = req.body.embedUrl !== undefined ? req.body.embedUrl : subsection.embedUrl;
-  subsection.metadata = req.body.metadata !== undefined ? req.body.metadata : subsection.metadata;
+  // Update subsection fields
+  if (req.body.title !== undefined) subsection.title = req.body.title;
+  if (req.body.content !== undefined) subsection.content = req.body.content;
+  if (req.body.contentType !== undefined) subsection.contentType = req.body.contentType;
+  if (req.body.order !== undefined) subsection.order = req.body.order;
+  if (processedFileUrl !== undefined) subsection.fileUrl = processedFileUrl;
+  if (processedVideoUrl !== undefined) subsection.videoUrl = processedVideoUrl;
+  if (req.body.embedUrl !== undefined) subsection.embedUrl = req.body.embedUrl;
+  if (req.body.linkUrl !== undefined) subsection.linkUrl = req.body.linkUrl;
+  if (req.body.metadata !== undefined) subsection.metadata = { ...subsection.metadata, ...req.body.metadata };
+  if (req.body.isActive !== undefined) subsection.isActive = req.body.isActive;
 
   await course.save();
   await course.populate('createdBy', 'name email');
@@ -485,7 +680,8 @@ export const deleteSubsection = asyncHandler(async (req, res, next) => {
   // Delete associated file if it's locally stored
   try {
     if (subsection.fileUrl && subsection.fileUrl.startsWith('/uploads/')) {
-      const filePath = path.join(__dirname, '../public', subsection.fileUrl);
+      const filename = path.basename(subsection.fileUrl);
+      const filePath = path.join(__dirname, '../public/uploads', filename);
       if (fs.existsSync(filePath)) {
         fs.unlinkSync(filePath);
       }
@@ -501,5 +697,60 @@ export const deleteSubsection = asyncHandler(async (req, res, next) => {
   res.status(200).json({
     success: true,
     data: course
+  });
+});
+
+// @desc    Get course analytics
+// @route   GET /api/v1/courses/:id/analytics
+// @access  Private (Faculty/Admin - course owner)
+export const getCourseAnalytics = asyncHandler(async (req, res, next) => {
+  const course = await Course.findById(req.params.id)
+    .populate('enrolledStudents', 'name email createdAt')
+    .populate('createdBy', 'name email');
+
+  if (!course) {
+    return next(new ErrorResponse(`Course not found with id of ${req.params.id}`, 404));
+  }
+
+  // Make sure user is course owner or admin
+  if (course.createdBy._id.toString() !== req.user.id && req.user.role !== 'admin') {
+    return next(new ErrorResponse(`User ${req.user.id} is not authorized to view course analytics`, 401));
+  }
+
+  // Calculate additional analytics
+  const analytics = {
+    ...course.analytics.toObject(),
+    enrollmentTrend: {
+      thisMonth: course.enrolledStudents.filter(student => {
+        const enrollmentDate = new Date(student.createdAt);
+        const thisMonth = new Date();
+        thisMonth.setDate(1);
+        return enrollmentDate >= thisMonth;
+      }).length,
+      lastMonth: course.enrolledStudents.filter(student => {
+        const enrollmentDate = new Date(student.createdAt);
+        const lastMonth = new Date();
+        lastMonth.setMonth(lastMonth.getMonth() - 1);
+        lastMonth.setDate(1);
+        const thisMonth = new Date();
+        thisMonth.setDate(1);
+        return enrollmentDate >= lastMonth && enrollmentDate < thisMonth;
+      }).length
+    },
+    contentStats: {
+      totalSections: course.sections.length,
+      totalSubsections: course.sections.reduce((total, section) => total + section.subsections.length, 0),
+      contentTypes: course.sections.reduce((acc, section) => {
+        section.subsections.forEach(sub => {
+          acc[sub.contentType] = (acc[sub.contentType] || 0) + 1;
+        });
+        return acc;
+      }, {})
+    }
+  };
+
+  res.status(200).json({
+    success: true,
+    data: analytics
   });
 });
