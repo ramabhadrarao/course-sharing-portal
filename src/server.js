@@ -48,7 +48,6 @@ app.use(cors({
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
-// Security headers
 app.use(helmet({
   crossOriginEmbedderPolicy: false, // Allow embedding videos
   contentSecurityPolicy: {
@@ -57,8 +56,18 @@ app.use(helmet({
       styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
       fontSrc: ["'self'", "https://fonts.gstatic.com"],
       imgSrc: ["'self'", "data:", "https:", "http:"],
-      frameSrc: ["'self'", "https://www.youtube.com", "https://youtube.com"],
-      connectSrc: ["'self'", "http://localhost:*", "ws://localhost:*"]
+      frameSrc: [
+        "'self'", 
+        "https://www.youtube.com", 
+        "https://youtube.com",
+        "https://drive.google.com",
+        "https://docs.google.com",
+        "https://mozilla.github.io",
+        "https://view.officeapps.live.com"
+      ],
+      connectSrc: ["'self'", "http://localhost:*", "ws://localhost:*"],
+      // FIX: Add frame-ancestors to allow PDF embedding
+      frameAncestors: ["'self'", "http://localhost:*", "https://localhost:*"]
     }
   }
 }));

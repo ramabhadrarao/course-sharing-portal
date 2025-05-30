@@ -42,6 +42,7 @@ const ProtectedRoute = ({
 function App() {
   return (
     <Router>
+      
       <Routes>
         {/* Auth routes */}
         <Route path="/" element={<AuthLayout />}>

@@ -15,6 +15,15 @@ import FileUpload from '../../components/ui/FileUpload';
 import { useAuthStore } from '../../stores/authStore';
 import { useCourseStore, Section, Subsection } from '../../stores/courseStore';
 import { formatDate } from '../../lib/utils';
+import PDFViewer from '../../components/ui/PDFViewer';
+// Add this utility function if it doesn't exist
+const formatFileSize = (bytes: number): string => {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+};
 
 const CourseDetailsPage: React.FC = () => {
   const { courseId } = useParams<{ courseId: string }>();
@@ -557,124 +566,172 @@ const CourseDetailsPage: React.FC = () => {
         </div>
 
         {/* Main Content Area */}
-        <div className="lg:col-span-2">
-          {selectedSubsection ? (
-            <Card>
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xl font-semibold">{selectedSubsection.title}</h3>
-                  <div className="flex items-center space-x-2">
-                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                      selectedSubsection.contentType === 'video' ? 'bg-purple-100 text-purple-800' :
-                      selectedSubsection.contentType === 'file' ? 'bg-blue-100 text-blue-800' :
-                      selectedSubsection.contentType === 'quiz' ? 'bg-yellow-100 text-yellow-800' :
-                      selectedSubsection.contentType === 'embed' ? 'bg-green-100 text-green-800' :
-                      selectedSubsection.contentType === 'link' ? 'bg-indigo-100 text-indigo-800' :
-                      'bg-gray-100 text-gray-800'
-                    }`}>
-                      {selectedSubsection.contentType}
-                    </span>
-                  </div>
-                </div>
-              </CardHeader>
-              
-              <CardContent>
-                {/* Video Content */}
-                {selectedSubsection.contentType === 'video' && selectedSubsection.videoUrl && (
-                  <div className="mb-6">
-                    <iframe
-                      src={selectedSubsection.videoUrl}
-                      className="w-full h-64 md:h-96 rounded-lg"
-                      allowFullScreen
-                      title={selectedSubsection.title}
-                    />
-                  </div>
-                )}
-                
-                {/* File Content */}
-                {selectedSubsection.contentType === 'file' && selectedSubsection.fileUrl && (
-                  <div className="mb-6">
-                    <iframe
-                      src={selectedSubsection.fileUrl}
-                      className="w-full h-96 rounded-lg border"
-                      title={selectedSubsection.title}
-                    />
-                    <div className="mt-2">
-                      <Button
-                        as="a"
-                        href={selectedSubsection.fileUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        variant="outline"
-                        size="sm"
-                        icon={<ExternalLink className="h-4 w-4" />}
-                      >
-                        Open in New Tab
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                {/* Embed Content */}
-                {selectedSubsection.contentType === 'embed' && selectedSubsection.embedUrl && (
-                  <div className="mb-6">
-                    <iframe
-                      src={selectedSubsection.embedUrl}
-                      className="w-full h-96 rounded-lg border"
-                      title={selectedSubsection.title}
-                    />
-                  </div>
-                )}
-
-                {/* Link Content */}
-                {selectedSubsection.contentType === 'link' && selectedSubsection.linkUrl && (
-                  <div className="mb-6">
-                    <Button
-                      as="a"
-                      href={selectedSubsection.linkUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      variant="primary"
-                      icon={<ExternalLink className="h-4 w-4" />}
-                    >
-                      Open Link
-                    </Button>
-                  </div>
-                )}
-                
-                {/* Text Content */}
-                <div 
-                  className="prose prose-sm max-w-none"
-                  dangerouslySetInnerHTML={{ __html: selectedSubsection.content }}
-                />
-              </CardContent>
-            </Card>
-          ) : (
-            <Card>
-              <CardContent className="text-center py-12">
-                <BookOpen className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  {currentCourse.sections.length === 0 
-                    ? 'No content yet' 
-                    : 'Select content to view'}
-                </h3>
-                <p className="text-gray-500 mb-4">
-                  {currentCourse.sections.length === 0 
-                    ? 'Start by adding your first section and content'
-                    : 'Choose a lesson from the sidebar to start learning'}
-                </p>
-                {isOwner && currentCourse.sections.length === 0 && (
-                  <Button
-                    onClick={() => setShowAddSection(true)}
-                    icon={<Plus className="h-4 w-4" />}
-                  >
-                    Add First Section
-                  </Button>
-                )}
-              </CardContent>
-            </Card>
-          )}
+<div className="lg:col-span-2">
+  {selectedSubsection ? (
+    <Card>
+      <CardHeader>
+        <div className="flex items-center justify-between">
+          <h3 className="text-xl font-semibold">{selectedSubsection.title}</h3>
+          <div className="flex items-center space-x-2">
+            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+              selectedSubsection.contentType === 'video' ? 'bg-purple-100 text-purple-800' :
+              selectedSubsection.contentType === 'file' ? 'bg-blue-100 text-blue-800' :
+              selectedSubsection.contentType === 'quiz' ? 'bg-yellow-100 text-yellow-800' :
+              selectedSubsection.contentType === 'embed' ? 'bg-green-100 text-green-800' :
+              selectedSubsection.contentType === 'link' ? 'bg-indigo-100 text-indigo-800' :
+              'bg-gray-100 text-gray-800'
+            }`}>
+              {selectedSubsection.contentType}
+            </span>
+            {selectedSubsection.fileUrl && (
+              <Button
+                as="a"
+                href={selectedSubsection.fileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                variant="ghost"
+                size="sm"
+                icon={<ExternalLink className="h-4 w-4" />}
+                title="Open in new tab"
+              />
+            )}
+          </div>
         </div>
+      </CardHeader>
+      
+      <CardContent>
+        {/* Video Content */}
+        {selectedSubsection.contentType === 'video' && selectedSubsection.videoUrl && (
+          <div className="mb-6">
+            <div className="relative rounded-lg overflow-hidden bg-black">
+              <iframe
+                src={selectedSubsection.videoUrl}
+                className="w-full h-64 md:h-96"
+                allowFullScreen
+                title={selectedSubsection.title}
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+              />
+            </div>
+          </div>
+        )}
+        
+        {/* Enhanced File Content with PDF Viewer */}
+        {selectedSubsection.contentType === 'file' && selectedSubsection.fileUrl && (
+          <div className="mb-6">
+            <PDFViewer 
+              fileUrl={selectedSubsection.fileUrl}
+              fileName={selectedSubsection.metadata?.fileName || selectedSubsection.title}
+              height="600px"
+              showControls={true}
+              allowDownload={true}
+              className="shadow-sm"
+            />
+          </div>
+        )}
+
+        {/* Embed Content */}
+        {selectedSubsection.contentType === 'embed' && selectedSubsection.embedUrl && (
+          <div className="mb-6">
+            <div className="border border-gray-200 rounded-lg overflow-hidden">
+              <iframe
+                src={selectedSubsection.embedUrl}
+                className="w-full h-96"
+                title={selectedSubsection.title}
+                allow="fullscreen"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Link Content */}
+        {selectedSubsection.contentType === 'link' && selectedSubsection.linkUrl && (
+          <div className="mb-6">
+            <div className="border border-gray-200 rounded-lg p-6 text-center">
+              <ExternalLink className="h-12 w-12 text-primary-600 mx-auto mb-4" />
+              <h4 className="text-lg font-medium text-gray-900 mb-2">External Resource</h4>
+              <p className="text-gray-600 mb-4">Click the button below to access this resource</p>
+              <Button
+                as="a"
+                href={selectedSubsection.linkUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                variant="primary"
+                icon={<ExternalLink className="h-4 w-4" />}
+              >
+                Open Resource
+              </Button>
+            </div>
+          </div>
+        )}
+        
+        {/* Text Content */}
+        {selectedSubsection.content && (
+          <div 
+            className="prose prose-sm max-w-none"
+            dangerouslySetInnerHTML={{ __html: selectedSubsection.content }}
+          />
+        )}
+
+        {/* File Metadata */}
+        {selectedSubsection.metadata && (
+          <div className="mt-6 pt-6 border-t border-gray-200">
+            <h4 className="text-sm font-medium text-gray-700 mb-3">File Information</h4>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              {selectedSubsection.metadata.fileName && (
+                <div>
+                  <span className="text-gray-500">File Name:</span>
+                  <p className="font-medium truncate">{selectedSubsection.metadata.fileName}</p>
+                </div>
+              )}
+              {selectedSubsection.metadata.fileSize && (
+                <div>
+                  <span className="text-gray-500">Size:</span>
+                  <p className="font-medium">{formatFileSize(selectedSubsection.metadata.fileSize)}</p>
+                </div>
+              )}
+              {selectedSubsection.metadata.mimeType && (
+                <div>
+                  <span className="text-gray-500">Type:</span>
+                  <p className="font-medium">{selectedSubsection.metadata.mimeType}</p>
+                </div>
+              )}
+              {selectedSubsection.metadata.duration && (
+                <div>
+                  <span className="text-gray-500">Duration:</span>
+                  <p className="font-medium">{selectedSubsection.metadata.duration} min</p>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  ) : (
+    <Card>
+      <CardContent className="text-center py-12">
+        <BookOpen className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+        <h3 className="text-lg font-medium text-gray-900 mb-2">
+          {currentCourse.sections.length === 0 
+            ? 'No content yet' 
+            : 'Select content to view'}
+        </h3>
+        <p className="text-gray-500 mb-4">
+          {currentCourse.sections.length === 0 
+            ? 'Start by adding your first section and content'
+            : 'Choose a lesson from the sidebar to start learning'}
+        </p>
+        {isOwner && currentCourse.sections.length === 0 && (
+          <Button
+            onClick={() => setShowAddSection(true)}
+            icon={<Plus className="h-4 w-4" />}
+          >
+            Add First Section
+          </Button>
+        )}
+      </CardContent>
+    </Card>
+  )}
+</div>
       </div>
 
       {/* Add Section Modal */}
