@@ -67,7 +67,8 @@ const CourseDetailsPage: React.FC = () => {
     fileUrl: '',
     videoUrl: '',
     embedUrl: '',
-    linkUrl: ''
+    linkUrl: '',
+    quizId: ''
   });
   const [courseForm, setCourseForm] = useState({
     title: '',
@@ -79,22 +80,11 @@ const CourseDetailsPage: React.FC = () => {
     difficulty: ''
   });
 
-  // Fixed user permission check - handle both id and _id fields
+  // Fixed user permission check - removed debug logging
   const isFaculty = user?.role === 'faculty' || user?.role === 'admin';
   const userId = user?.id || user?._id;
   const courseCreatedById = currentCourse?.createdBy?._id || currentCourse?.createdBy?.id;
   const isOwner = isFaculty && userId === courseCreatedById;
-
-  console.log('Debug permissions:', {
-    fullUser: user,
-    userId: userId,
-    userRole: user?.role,
-    isFaculty,
-    courseCreatedBy: courseCreatedById,
-    isOwner,
-    comparison: `${userId} === ${courseCreatedById} = ${userId === courseCreatedById}`,
-    currentCourse: currentCourse?.title
-  });
 
   useEffect(() => {
     if (courseId) {
@@ -249,7 +239,8 @@ const CourseDetailsPage: React.FC = () => {
       fileUrl: '',
       videoUrl: '',
       embedUrl: '',
-      linkUrl: ''
+      linkUrl: '',
+      quizId: ''
     });
   };
 
@@ -271,7 +262,8 @@ const CourseDetailsPage: React.FC = () => {
       fileUrl: subsection.fileUrl || '',
       videoUrl: subsection.videoUrl || '',
       embedUrl: subsection.embedUrl || '',
-      linkUrl: subsection.linkUrl || ''
+      linkUrl: subsection.linkUrl || '',
+      quizId: (subsection as any).quizId || ''
     });
     setEditingSubsection(subsection.id);
   };
@@ -478,9 +470,9 @@ const CourseDetailsPage: React.FC = () => {
                         currentCourse.sections.map((section, sectionIndex) => (
                           <div key={section.id} className="border-b border-gray-200 last:border-b-0">
                             <div className="flex items-center justify-between p-4 hover:bg-gray-50">
-                              <button
+                              <div
                                 onClick={() => toggleSectionExpansion(section.id)}
-                                className="flex items-center flex-1 text-left"
+                                className="flex items-center flex-1 text-left cursor-pointer"
                               >
                                 {expandedSections.has(section.id) ? (
                                   <ChevronDown className="h-4 w-4 mr-2" />
@@ -491,27 +483,32 @@ const CourseDetailsPage: React.FC = () => {
                                 <span className="ml-2 text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded">
                                   {section.subsections.length}
                                 </span>
-                              </button>
+                              </div>
                               
                               {isFaculty && (
                                 <div className="flex space-x-1 ml-2">
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => startEditingSection(section)}
-                                    icon={<Edit className="h-3 w-3" />}
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      startEditingSection(section);
+                                    }}
                                     disabled={!isOwner}
+                                    className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-50"
                                     title={!isOwner ? "Only course owner can edit" : "Edit Section"}
-                                  />
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => handleDeleteSection(section.id)}
-                                    icon={<Trash className="h-3 w-3" />}
-                                    className="text-error-600 hover:text-error-700"
+                                  >
+                                    <Edit className="h-3 w-3" />
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteSection(section.id);
+                                    }}
                                     disabled={!isOwner}
+                                    className="p-1 text-gray-400 hover:text-error-600 disabled:opacity-50"
                                     title={!isOwner ? "Only course owner can delete" : "Delete Section"}
-                                  />
+                                  >
+                                    <Trash className="h-3 w-3" />
+                                  </button>
                                 </div>
                               )}
                             </div>
@@ -519,10 +516,10 @@ const CourseDetailsPage: React.FC = () => {
                             {expandedSections.has(section.id) && (
                               <div className="pl-6 pb-2">
                                 {section.subsections.map((subsection, subsectionIndex) => (
-                                  <button
+                                  <div
                                     key={subsection.id}
                                     onClick={() => setSelectedSubsection(subsection)}
-                                    className={`w-full text-left p-3 rounded-md mb-1 flex items-center justify-between group ${
+                                    className={`w-full text-left p-3 rounded-md mb-1 flex items-center justify-between group cursor-pointer ${
                                       selectedSubsection?.id === subsection.id
                                         ? 'bg-primary-50 text-primary-700 border border-primary-200'
                                         : 'hover:bg-gray-50'
@@ -532,7 +529,7 @@ const CourseDetailsPage: React.FC = () => {
                                       {subsection.contentType === 'video' && <Play className="h-4 w-4 mr-2" />}
                                       {subsection.contentType === 'file' && <FileText className="h-4 w-4 mr-2" />}
                                       {subsection.contentType === 'text' && <Type className="h-4 w-4 mr-2" />}
-                                      {subsection.contentType === 'quiz' && <BookOpen className="h-4 w-4 mr-2" />}
+                                      {subsection.contentType === 'quiz' && <MessageCircle className="h-4 w-4 mr-2" />}
                                       {subsection.contentType === 'embed' && <ExternalLink className="h-4 w-4 mr-2" />}
                                       {subsection.contentType === 'link' && <Link2 className="h-4 w-4 mr-2" />}
                                       <span className="text-sm">{subsection.title}</span>
@@ -540,32 +537,31 @@ const CourseDetailsPage: React.FC = () => {
                                     
                                     {isFaculty && (
                                       <div className="opacity-0 group-hover:opacity-100 flex space-x-1">
-                                        <Button
-                                          size="sm"
-                                          variant="ghost"
+                                        <button
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             startEditingSubsection(subsection);
                                           }}
-                                          icon={<Edit className="h-3 w-3" />}
                                           disabled={!isOwner}
+                                          className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-50"
                                           title={!isOwner ? "Only course owner can edit" : "Edit Content"}
-                                        />
-                                        <Button
-                                          size="sm"
-                                          variant="ghost"
+                                        >
+                                          <Edit className="h-3 w-3" />
+                                        </button>
+                                        <button
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             handleDeleteSubsection(section.id, subsection.id);
                                           }}
-                                          icon={<Trash className="h-3 w-3" />}
-                                          className="text-error-600 hover:text-error-700"
                                           disabled={!isOwner}
+                                          className="p-1 text-gray-400 hover:text-error-600 disabled:opacity-50"
                                           title={!isOwner ? "Only course owner can delete" : "Delete Content"}
-                                        />
+                                        >
+                                          <Trash className="h-3 w-3" />
+                                        </button>
                                       </div>
                                     )}
-                                  </button>
+                                  </div>
                                 ))}
                                 
                                 {isFaculty && (
@@ -686,6 +682,39 @@ const CourseDetailsPage: React.FC = () => {
                             >
                               Open Resource
                             </Button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Quiz Content Display */}
+                      {selectedSubsection.contentType === 'quiz' && (
+                        <div className="mb-6">
+                          <div className="border border-blue-200 rounded-lg p-6 text-center bg-blue-50">
+                            <MessageCircle className="h-12 w-12 text-blue-600 mx-auto mb-4" />
+                            <h4 className="text-lg font-medium text-gray-900 mb-2">Interactive Quiz</h4>
+                            <p className="text-gray-600 mb-4">
+                              Test your knowledge with this interactive quiz
+                            </p>
+                            <div className="flex justify-center space-x-2">
+                              <Button
+                                as={Link}
+                                to={`/courses/${courseId}/quizzes`}
+                                variant="outline"
+                                icon={<MessageCircle className="h-4 w-4" />}
+                              >
+                                View All Quizzes
+                              </Button>
+                              {isFaculty && (
+                                <Button
+                                  as={Link}
+                                  to={`/courses/${courseId}/quizzes`}
+                                  variant="primary"
+                                  icon={<Plus className="h-4 w-4" />}
+                                >
+                                  Create Quiz
+                                </Button>
+                              )}
+                            </div>
                           </div>
                         </div>
                       )}
@@ -940,6 +969,47 @@ const CourseDetailsPage: React.FC = () => {
                   helperText="External website or resource URL"
                   fullWidth
                 />
+              )}
+
+              {/* Quiz Content Section */}
+              {subsectionForm.contentType === 'quiz' && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Quiz Content
+                  </label>
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                    <div className="flex items-center mb-3">
+                      <MessageCircle className="h-5 w-5 text-blue-600 mr-2" />
+                      <span className="text-sm font-medium text-blue-900">Interactive Quiz</span>
+                    </div>
+                    <p className="text-sm text-blue-700 mb-4">
+                      Quizzes are managed separately. Create or select a quiz from the quiz management section.
+                    </p>
+                    <div className="flex space-x-2">
+                      <Button
+                        type="button"
+                        as={Link}
+                        to={`/courses/${courseId}/quizzes`}
+                        variant="primary"
+                        size="sm"
+                        icon={<Plus className="h-4 w-4" />}
+                      >
+                        Manage Quizzes
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setSubsectionForm(prev => ({ ...prev, contentType: 'text' }))}
+                      >
+                        Change Content Type
+                      </Button>
+                    </div>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    After creating a quiz, you can embed it in your course content or link to it directly.
+                  </p>
+                </div>
               )}
               
               {/* Rich Text Editor */}

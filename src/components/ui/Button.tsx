@@ -1,4 +1,5 @@
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { cn } from '../../lib/utils';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
@@ -7,6 +8,11 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   isLoading?: boolean;
   icon?: React.ReactNode;
   iconPosition?: 'left' | 'right';
+  as?: React.ElementType | typeof Link;
+  to?: string;
+  href?: string;
+  target?: string;
+  rel?: string;
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
@@ -20,6 +26,11 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       iconPosition = 'left',
       children,
       disabled,
+      as: Component = 'button',
+      to,
+      href,
+      target,
+      rel,
       ...props
     },
     ref
@@ -39,20 +50,17 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       lg: 'px-6 py-3 text-base rounded-md',
     };
 
-    return (
-      <button
-        ref={ref}
-        className={cn(
-          'inline-flex items-center justify-center font-medium transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2',
-          variantClasses[variant],
-          sizeClasses[size],
-          isLoading && 'opacity-70 cursor-not-allowed',
-          disabled && 'opacity-50 cursor-not-allowed',
-          className
-        )}
-        disabled={disabled || isLoading}
-        {...props}
-      >
+    const baseClasses = cn(
+      'inline-flex items-center justify-center font-medium transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2',
+      variantClasses[variant],
+      sizeClasses[size],
+      isLoading && 'opacity-70 cursor-not-allowed',
+      disabled && 'opacity-50 cursor-not-allowed',
+      className
+    );
+
+    const content = (
+      <>
         {isLoading && (
           <svg
             className="animate-spin -ml-1 mr-2 h-4 w-4 text-current"
@@ -80,6 +88,56 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
         )}
         {children}
         {icon && iconPosition === 'right' && <span className="ml-2">{icon}</span>}
+      </>
+    );
+
+    // Handle different component types
+    if (Component === Link || to) {
+      return (
+        <Link
+          to={to!}
+          className={baseClasses}
+          {...(props as any)}
+        >
+          {content}
+        </Link>
+      );
+    }
+
+    if (Component === 'a' || href) {
+      return (
+        <a
+          href={href}
+          target={target}
+          rel={rel}
+          className={baseClasses}
+          {...(props as any)}
+        >
+          {content}
+        </a>
+      );
+    }
+
+    if (typeof Component === 'string' && Component !== 'button') {
+      return (
+        <Component
+          className={baseClasses}
+          disabled={disabled || isLoading}
+          {...props}
+        >
+          {content}
+        </Component>
+      );
+    }
+
+    return (
+      <button
+        ref={ref}
+        className={baseClasses}
+        disabled={disabled || isLoading}
+        {...props}
+      >
+        {content}
       </button>
     );
   }

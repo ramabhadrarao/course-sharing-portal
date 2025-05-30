@@ -16,6 +16,7 @@ import CreateCoursePage from './pages/courses/CreateCoursePage';
 import ProfilePage from './pages/profile/ProfilePage';
 import AdminUsersPage from './pages/admin/AdminUsersPage';
 import QuizManagementPage from './pages/quizzes/QuizManagementPage';
+import QuizTakingPage from './pages/quizzes/QuizTakingPage';
 import NotFoundPage from './pages/NotFoundPage';
 
 // Protected route wrapper
@@ -42,7 +43,6 @@ const ProtectedRoute = ({
 function App() {
   return (
     <Router>
-      
       <Routes>
         {/* Auth routes */}
         <Route path="/" element={<AuthLayout />}>
@@ -60,11 +60,17 @@ function App() {
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="courses" element={<CoursesPage />} />
           <Route path="courses/:courseId" element={<CourseDetailsPage />} />
+          
+          {/* Quiz Management Routes */}
           <Route path="courses/:courseId/quizzes" element={
             <ProtectedRoute allowedRoles={['faculty', 'admin']}>
               <QuizManagementPage />
             </ProtectedRoute>
           } />
+          
+          {/* Quiz Taking Routes */}
+          <Route path="courses/:courseId/quiz/:quizId" element={<QuizTakingPage />} />
+          
           <Route path="courses/create" element={
             <ProtectedRoute allowedRoles={['faculty', 'admin']}>
               <CreateCoursePage />
