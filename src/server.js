@@ -11,7 +11,7 @@ import { fileURLToPath } from 'url';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
 import courseRoutes from './routes/courses.js';
-import quizRoutes from './routes/quizzes.js';
+import quizRoutes, { individualQuizRoutes } from './routes/quizzes.js';
 
 // Import middleware
 import errorHandler from './middleware/error.js';
@@ -86,7 +86,10 @@ app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/courses', courseRoutes);
-app.use('/api/v1/courses/:courseId/quizzes', quizRoutes);
+
+// Quiz routes - both course-specific and individual
+app.use('/api/v1/courses/:courseId/quizzes', quizRoutes); // Course-specific quiz routes
+app.use('/api/v1/quizzes', individualQuizRoutes); // Individual quiz routes
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

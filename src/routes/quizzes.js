@@ -1,21 +1,44 @@
-// ===== src/routes/quizzes.js =====
+// src/routes/quizzes.js
 import express from 'express';
 import {
   getQuizzes,
   getQuiz,
   createQuiz,
-  submitQuizAttempt
+  updateQuiz,
+  deleteQuiz,
+  submitQuizAttempt,
+  getQuizAttempts,
+  getMyQuizAttempt,
+  getQuizStats
 } from '../controllers/quizzes.js';
 import { protect, authorize } from '../middleware/auth.js';
 
 const router = express.Router({ mergeParams: true });
 
+// All routes require authentication
+router.use(protect);
+
+// Course-specific quiz routes (these have courseId in params)
 router
   .route('/')
-  .get(protect, getQuizzes)
-  .post(protect, authorize('faculty', 'admin'), createQuiz);
+  .get(getQuizzes) // Get all quizzes for a course
+  .post(authorize('faculty', 'admin'), createQuiz); // Create quiz for a course
 
-router.get('/:id', protect, getQuiz);
-router.post('/:id/attempt', protect, authorize('student'), submitQuizAttempt);
+// Individual quiz routes (these use the quiz ID directly)
+// Note: These routes will be mounted at /api/v1/quizzes/:id from server.js
+export const individualQuizRoutes = express.Router();
+individualQuizRoutes.use(protect);
+
+individualQuizRoutes
+  .route('/:id')
+  .get(getQuiz) // Get single quiz
+  .put(authorize('faculty', 'admin'), updateQuiz) // Update quiz
+  .delete(authorize('faculty', 'admin'), deleteQuiz); // Delete quiz
+
+// Quiz attempt routes
+individualQuizRoutes.post('/:id/attempt', submitQuizAttempt); // Submit quiz attempt
+individualQuizRoutes.get('/:id/attempts', authorize('faculty', 'admin'), getQuizAttempts); // Get all attempts (faculty/admin)
+individualQuizRoutes.get('/:id/my-attempt', getMyQuizAttempt); // Get user's own attempt
+individualQuizRoutes.get('/:id/stats', authorize('faculty', 'admin'), getQuizStats); // Get quiz statistics
 
 export default router;

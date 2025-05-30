@@ -6,6 +6,7 @@ import bcrypt from 'bcryptjs';
 import User from './models/User.js';
 import Course from './models/Course.js';
 import Quiz from './models/Quiz.js';
+import QuizAttempt from './models/QuizAttempt.js';
 import logger from './utils/logger.js';
 
 // Load env vars
@@ -151,24 +152,6 @@ const createCoursesData = (facultyUsers) => [
             content: '<h2>What is HTML?</h2><p>HTML (HyperText Markup Language) is the standard markup language for creating web pages. It describes the structure and content of a webpage using elements and tags.</p><h3>Basic HTML Structure:</h3><pre><code>&lt;!DOCTYPE html&gt;\n&lt;html&gt;\n&lt;head&gt;\n    &lt;title&gt;My First Webpage&lt;/title&gt;\n&lt;/head&gt;\n&lt;body&gt;\n    &lt;h1&gt;Welcome to My Website&lt;/h1&gt;\n    &lt;p&gt;This is my first paragraph.&lt;/p&gt;\n&lt;/body&gt;\n&lt;/html&gt;</code></pre>',
             contentType: 'text',
             order: 1
-          },
-          {
-            title: 'HTML Elements and Tags',
-            content: '<h2>Common HTML Elements</h2><p>HTML uses tags to define elements. Here are some common ones:</p><h3>Text Elements:</h3><ul><li><code>&lt;h1&gt; to &lt;h6&gt;</code> - Headings</li><li><code>&lt;p&gt;</code> - Paragraphs</li><li><code>&lt;strong&gt;</code> - Bold text</li><li><code>&lt;em&gt;</code> - Italic text</li></ul><h3>List Elements:</h3><ul><li><code>&lt;ul&gt;</code> - Unordered list</li><li><code>&lt;ol&gt;</code> - Ordered list</li><li><code>&lt;li&gt;</code> - List items</li></ul><h3>Link and Image Elements:</h3><ul><li><code>&lt;a href="url"&gt;</code> - Links</li><li><code>&lt;img src="image.jpg" alt="description"&gt;</code> - Images</li></ul>',
-            contentType: 'text',
-            order: 2
-          }
-        ]
-      },
-      {
-        title: 'CSS Styling',
-        order: 2,
-        subsections: [
-          {
-            title: 'Introduction to CSS',
-            content: '<h2>What is CSS?</h2><p>CSS (Cascading Style Sheets) is used to style and layout web pages. It controls the visual appearance of HTML elements.</p><h3>CSS Syntax:</h3><pre><code>selector {\n    property: value;\n    property: value;\n}</code></pre><h3>Example:</h3><pre><code>h1 {\n    color: blue;\n    font-size: 24px;\n    text-align: center;\n}\n\np {\n    color: #333;\n    line-height: 1.6;\n}</code></pre>',
-            contentType: 'text',
-            order: 1
           }
         ]
       }
@@ -188,19 +171,7 @@ const createCoursesData = (facultyUsers) => [
         subsections: [
           {
             title: 'What are Data Structures?',
-            content: '<h2>Data Structures</h2><p>Data structures are ways of organizing and storing data so that they can be accessed and worked with efficiently. They define the relationship between the data and the operations that can be performed on the data.</p><h3>Why are Data Structures Important?</h3><ul><li>Efficient data organization</li><li>Faster data access and manipulation</li><li>Memory optimization</li><li>Better algorithm performance</li></ul><h3>Common Data Structures:</h3><ul><li>Arrays</li><li>Linked Lists</li><li>Stacks</li><li>Queues</li><li>Trees</li><li>Graphs</li><li>Hash Tables</li></ul>',
-            contentType: 'text',
-            order: 1
-          }
-        ]
-      },
-      {
-        title: 'Arrays and Lists',
-        order: 2,
-        subsections: [
-          {
-            title: 'Understanding Arrays',
-            content: '<h2>Arrays</h2><p>An array is a collection of elements stored at contiguous memory locations. Elements can be accessed using their index.</p><h3>Array Characteristics:</h3><ul><li>Fixed size (in most programming languages)</li><li>Elements of the same data type</li><li>Random access using index</li><li>Zero-based indexing</li></ul><h3>Example in Python:</h3><pre><code># Creating an array\nnumbers = [1, 2, 3, 4, 5]\n\n# Accessing elements\nfirst_element = numbers[0]  # Returns 1\nlast_element = numbers[-1]  # Returns 5\n\n# Modifying elements\nnumbers[0] = 10  # Changes first element to 10</code></pre>',
+            content: '<h2>Data Structures</h2><p>Data structures are ways of organizing and storing data so that they can be accessed and worked with efficiently.</p>',
             contentType: 'text',
             order: 1
           }
@@ -215,20 +186,7 @@ const createCoursesData = (facultyUsers) => [
     coverImage: 'https://images.pexels.com/photos/373543/pexels-photo-373543.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
     createdBy: facultyUsers[2]._id,
     enrolledStudents: [],
-    sections: [
-      {
-        title: 'Database Fundamentals',
-        order: 1,
-        subsections: [
-          {
-            title: 'Introduction to Databases',
-            content: '<h2>What is a Database?</h2><p>A database is a structured collection of data that is stored and accessed electronically. Database Management Systems (DBMS) are software systems that enable users to define, create, maintain, and control access to the database.</p><h3>Types of Databases:</h3><ul><li><strong>Relational Databases:</strong> MySQL, PostgreSQL, Oracle</li><li><strong>NoSQL Databases:</strong> MongoDB, Cassandra, Redis</li><li><strong>Graph Databases:</strong> Neo4j, Amazon Neptune</li><li><strong>Document Databases:</strong> MongoDB, CouchDB</li></ul><h3>Key Concepts:</h3><ul><li>Tables, Rows, and Columns</li><li>Primary and Foreign Keys</li><li>Relationships</li><li>Normalization</li><li>ACID Properties</li></ul>',
-            contentType: 'text',
-            order: 1
-          }
-        ]
-      }
-    ]
+    sections: []
   },
   {
     title: 'Machine Learning Basics',
@@ -237,24 +195,11 @@ const createCoursesData = (facultyUsers) => [
     coverImage: 'https://images.pexels.com/photos/3861958/pexels-photo-3861958.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
     createdBy: facultyUsers[2]._id,
     enrolledStudents: [],
-    sections: [
-      {
-        title: 'Introduction to Machine Learning',
-        order: 1,
-        subsections: [
-          {
-            title: 'What is Machine Learning?',
-            content: '<h2>Machine Learning Overview</h2><p>Machine Learning (ML) is a subset of artificial intelligence that enables computers to learn and make decisions from data without being explicitly programmed for every task.</p><h3>Types of Machine Learning:</h3><ul><li><strong>Supervised Learning:</strong> Learning with labeled data (e.g., classification, regression)</li><li><strong>Unsupervised Learning:</strong> Finding patterns in unlabeled data (e.g., clustering, dimensionality reduction)</li><li><strong>Reinforcement Learning:</strong> Learning through interaction and feedback</li></ul><h3>Common Applications:</h3><ul><li>Image recognition</li><li>Natural language processing</li><li>Recommendation systems</li><li>Fraud detection</li><li>Autonomous vehicles</li></ul>',
-            contentType: 'text',
-            order: 1
-          }
-        ]
-      }
-    ]
+    sections: []
   }
 ];
 
-// Sample quizzes data
+// Enhanced sample quizzes data
 const createQuizzesData = (courses) => [
   {
     title: 'Programming Fundamentals Quiz',
@@ -289,6 +234,26 @@ const createQuizzesData = (courses) => [
           { text: 'Must be declared before use', isCorrect: true }
         ],
         type: 'multiple'
+      },
+      {
+        text: 'What is the correct way to declare a variable in Python?',
+        options: [
+          { text: 'var x = 10', isCorrect: false },
+          { text: 'int x = 10', isCorrect: false },
+          { text: 'x = 10', isCorrect: true },
+          { text: 'declare x = 10', isCorrect: false }
+        ],
+        type: 'single'
+      },
+      {
+        text: 'Which control structures are used for repetition? (Select all that apply)',
+        options: [
+          { text: 'if statement', isCorrect: false },
+          { text: 'for loop', isCorrect: true },
+          { text: 'while loop', isCorrect: true },
+          { text: 'switch statement', isCorrect: false }
+        ],
+        type: 'multiple'
       }
     ],
     timeLimit: 15
@@ -316,9 +281,66 @@ const createQuizzesData = (courses) => [
           { text: '<h0>', isCorrect: false }
         ],
         type: 'single'
+      },
+      {
+        text: 'Which of the following are valid HTML tags? (Select all that apply)',
+        options: [
+          { text: '<div>', isCorrect: true },
+          { text: '<span>', isCorrect: true },
+          { text: '<section>', isCorrect: true },
+          { text: '<random>', isCorrect: false }
+        ],
+        type: 'multiple'
+      },
+      {
+        text: 'What is the correct HTML element for inserting a line break?',
+        options: [
+          { text: '<break>', isCorrect: false },
+          { text: '<br>', isCorrect: true },
+          { text: '<lb>', isCorrect: false },
+          { text: '<newline>', isCorrect: false }
+        ],
+        type: 'single'
       }
     ],
     timeLimit: 10
+  },
+  {
+    title: 'Web Development Advanced Quiz',
+    course: courses[1]._id, // Web Development course
+    questions: [
+      {
+        text: 'Which CSS property is used to change the text color?',
+        options: [
+          { text: 'font-color', isCorrect: false },
+          { text: 'text-color', isCorrect: false },
+          { text: 'color', isCorrect: true },
+          { text: 'text-style', isCorrect: false }
+        ],
+        type: 'single'
+      },
+      {
+        text: 'Which of the following are CSS layout models? (Select all that apply)',
+        options: [
+          { text: 'Flexbox', isCorrect: true },
+          { text: 'Grid', isCorrect: true },
+          { text: 'Float', isCorrect: true },
+          { text: 'Table', isCorrect: false }
+        ],
+        type: 'multiple'
+      },
+      {
+        text: 'What does CSS stand for?',
+        options: [
+          { text: 'Creative Style Sheets', isCorrect: false },
+          { text: 'Computer Style Sheets', isCorrect: false },
+          { text: 'Cascading Style Sheets', isCorrect: true },
+          { text: 'Colorful Style Sheets', isCorrect: false }
+        ],
+        type: 'single'
+      }
+    ],
+    timeLimit: 12
   },
   {
     title: 'Data Structures Fundamentals',
@@ -343,9 +365,184 @@ const createQuizzesData = (courses) => [
           { text: 'Linked List', isCorrect: false }
         ],
         type: 'single'
+      },
+      {
+        text: 'Which of the following are linear data structures? (Select all that apply)',
+        options: [
+          { text: 'Array', isCorrect: true },
+          { text: 'Linked List', isCorrect: true },
+          { text: 'Tree', isCorrect: false },
+          { text: 'Stack', isCorrect: true }
+        ],
+        type: 'multiple'
+      },
+      {
+        text: 'What is the worst-case time complexity for searching in a binary search tree?',
+        options: [
+          { text: 'O(1)', isCorrect: false },
+          { text: 'O(log n)', isCorrect: false },
+          { text: 'O(n)', isCorrect: true },
+          { text: 'O(n log n)', isCorrect: false }
+        ],
+        type: 'single'
+      },
+      {
+        text: 'Which operations are typically supported by a queue? (Select all that apply)',
+        options: [
+          { text: 'Enqueue', isCorrect: true },
+          { text: 'Dequeue', isCorrect: true },
+          { text: 'Push', isCorrect: false },
+          { text: 'Peek/Front', isCorrect: true }
+        ],
+        type: 'multiple'
       }
     ],
     timeLimit: 20
+  },
+  {
+    title: 'Database Concepts Quiz',
+    course: courses[3]._id, // Database course
+    questions: [
+      {
+        text: 'What does ACID stand for in database transactions?',
+        options: [
+          { text: 'Atomicity, Consistency, Isolation, Durability', isCorrect: true },
+          { text: 'Accuracy, Consistency, Integrity, Durability', isCorrect: false },
+          { text: 'Atomicity, Concurrency, Isolation, Durability', isCorrect: false },
+          { text: 'Accuracy, Concurrency, Integrity, Dependency', isCorrect: false }
+        ],
+        type: 'single'
+      },
+      {
+        text: 'Which of the following are types of database relationships? (Select all that apply)',
+        options: [
+          { text: 'One-to-One', isCorrect: true },
+          { text: 'One-to-Many', isCorrect: true },
+          { text: 'Many-to-Many', isCorrect: true },
+          { text: 'None-to-All', isCorrect: false }
+        ],
+        type: 'multiple'
+      },
+      {
+        text: 'What is a primary key?',
+        options: [
+          { text: 'A key that can be null', isCorrect: false },
+          { text: 'A unique identifier for a record', isCorrect: true },
+          { text: 'A key used for encryption', isCorrect: false },
+          { text: 'A foreign key reference', isCorrect: false }
+        ],
+        type: 'single'
+      }
+    ],
+    timeLimit: 15
+  },
+  {
+    title: 'Machine Learning Introduction',
+    course: courses[4]._id, // ML course
+    questions: [
+      {
+        text: 'What is supervised learning?',
+        options: [
+          { text: 'Learning without any data', isCorrect: false },
+          { text: 'Learning with labeled training data', isCorrect: true },
+          { text: 'Learning through trial and error', isCorrect: false },
+          { text: 'Learning from unlabeled data', isCorrect: false }
+        ],
+        type: 'single'
+      },
+      {
+        text: 'Which of the following are types of machine learning? (Select all that apply)',
+        options: [
+          { text: 'Supervised Learning', isCorrect: true },
+          { text: 'Unsupervised Learning', isCorrect: true },
+          { text: 'Reinforcement Learning', isCorrect: true },
+          { text: 'Quantum Learning', isCorrect: false }
+        ],
+        type: 'multiple'
+      },
+      {
+        text: 'What is overfitting in machine learning?',
+        options: [
+          { text: 'When a model performs well on training data but poorly on new data', isCorrect: true },
+          { text: 'When a model has too few parameters', isCorrect: false },
+          { text: 'When training data is insufficient', isCorrect: false },
+          { text: 'When the model is too simple', isCorrect: false }
+        ],
+        type: 'single'
+      }
+    ],
+    timeLimit: 18
+  }
+];
+
+// Sample quiz attempts data
+const createQuizAttemptsData = (quizzes, students) => [
+  // Student 1 (John Smith) attempts
+  {
+    quiz: quizzes[0]._id, // Programming Fundamentals Quiz
+    student: students[0]._id,
+    answers: [
+      {
+        question: quizzes[0].questions[0]._id,
+        selectedOptions: [quizzes[0].questions[0].options[1]._id] // Correct: Integer
+      },
+      {
+        question: quizzes[0].questions[1]._id,
+        selectedOptions: [quizzes[0].questions[1].options[1]._id] // Correct: "53"
+      },
+      {
+        question: quizzes[0].questions[2]._id,
+        selectedOptions: [
+          quizzes[0].questions[2].options[0]._id, // Correct: Store data values
+          quizzes[0].questions[2].options[1]._id  // Correct: Have a data type
+          // Missing: Must be declared before use
+        ]
+      }
+    ],
+    score: 67, // 2 out of 3 correct (67%)
+    completedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) // 2 days ago
+  },
+  // Student 2 (Alice Williams) attempts
+  {
+    quiz: quizzes[0]._id, // Programming Fundamentals Quiz
+    student: students[1]._id,
+    answers: [
+      {
+        question: quizzes[0].questions[0]._id,
+        selectedOptions: [quizzes[0].questions[0].options[1]._id] // Correct: Integer
+      },
+      {
+        question: quizzes[0].questions[1]._id,
+        selectedOptions: [quizzes[0].questions[1].options[1]._id] // Correct: "53"
+      },
+      {
+        question: quizzes[0].questions[2]._id,
+        selectedOptions: [
+          quizzes[0].questions[2].options[0]._id, // Correct: Store data values
+          quizzes[0].questions[2].options[1]._id, // Correct: Have a data type
+          quizzes[0].questions[2].options[3]._id  // Correct: Must be declared before use
+        ]
+      }
+    ],
+    score: 100, // 3 out of 3 correct (100%)
+    completedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000) // 1 day ago
+  },
+  // Student 1 attempts HTML quiz
+  {
+    quiz: quizzes[1]._id, // HTML Basics Quiz
+    student: students[0]._id,
+    answers: [
+      {
+        question: quizzes[1].questions[0]._id,
+        selectedOptions: [quizzes[1].questions[0].options[0]._id] // Correct: HyperText Markup Language
+      },
+      {
+        question: quizzes[1].questions[1]._id,
+        selectedOptions: [quizzes[1].questions[1].options[1]._id] // Correct: <h1>
+      }
+    ],
+    score: 100, // 2 out of 2 correct (100%)
+    completedAt: new Date(Date.now() - 3 * 60 * 60 * 1000) // 3 hours ago
   }
 ];
 
@@ -358,6 +555,7 @@ const importData = async () => {
     await User.deleteMany();
     await Course.deleteMany();
     await Quiz.deleteMany();
+    await QuizAttempt.deleteMany();
     console.log('✅ Cleared existing data');
 
     // Hash passwords and create users
@@ -384,20 +582,31 @@ const importData = async () => {
 
     // Create quizzes
     const quizzesData = createQuizzesData(createdCourses);
-    await Quiz.insertMany(quizzesData);
+    const createdQuizzes = await Quiz.insertMany(quizzesData);
     console.log('✅ Quizzes created');
+
+    // Create quiz attempts
+    const attemptsData = createQuizAttemptsData(createdQuizzes, studentUsers);
+    await QuizAttempt.insertMany(attemptsData);
+    console.log('✅ Quiz attempts created');
 
     console.log('🎉 Database seeding completed successfully!');
     console.log('\n📊 Summary:');
     console.log(`👤 Users: ${createdUsers.length} (1 admin, ${facultyUsers.length} faculty, ${studentUsers.length} students)`);
     console.log(`📚 Courses: ${createdCourses.length}`);
-    console.log(`❓ Quizzes: ${quizzesData.length}`);
+    console.log(`❓ Quizzes: ${createdQuizzes.length}`);
+    console.log(`📝 Quiz Attempts: ${attemptsData.length}`);
     
     console.log('\n🔐 Login Credentials:');
     console.log('Admin: admin@example.com / password');
     console.log('Faculty: faculty@example.com / password');
     console.log('Student: student@example.com / password');
     console.log('\nAll accounts use password: "password"');
+    
+    console.log('\n🎯 Quiz Test Data:');
+    console.log('- John Smith has attempted Programming Fundamentals Quiz (67%) and HTML Basics Quiz (100%)');
+    console.log('- Alice Williams has attempted Programming Fundamentals Quiz (100%)');
+    console.log('- Try taking quizzes with different student accounts to test the system!');
 
   } catch (error) {
     console.error('❌ Error seeding database:', error);
@@ -411,6 +620,7 @@ const deleteData = async () => {
     await User.deleteMany();
     await Course.deleteMany();
     await Quiz.deleteMany();
+    await QuizAttempt.deleteMany();
     console.log('✅ Data destroyed');
   } catch (error) {
     console.error('❌ Error deleting data:', error);

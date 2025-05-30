@@ -18,7 +18,10 @@ interface Quiz {
   _id: string;
   id: string;
   title: string;
-  course: string;
+  course: string | {
+    _id: string;
+    title: string;
+  };
   questions: QuizQuestion[];
   timeLimit: number;
   createdAt: string;
@@ -28,8 +31,15 @@ interface Quiz {
 interface QuizAttempt {
   _id: string;
   id: string;
-  quiz: string;
-  student: string;
+  quiz: string | {
+    _id: string;
+    title: string;
+  };
+  student: string | {
+    _id: string;
+    name: string;
+    email: string;
+  };
   answers: Array<{
     question: string;
     selectedOptions: string[];
@@ -37,6 +47,20 @@ interface QuizAttempt {
   score: number;
   startedAt: string;
   completedAt?: string;
+}
+
+interface QuizStats {
+  totalAttempts: number;
+  averageScore: number;
+  highestScore: number;
+  lowestScore: number;
+  passRate: number;
+  scoreDistribution: {
+    excellent: number; // 90-100%
+    good: number;      // 80-89%
+    average: number;   // 70-79%
+    poor: number;      // below 70%
+  };
 }
 
 interface CreateQuizData {
@@ -64,6 +88,7 @@ interface QuizState {
   currentQuiz: Quiz | null;
   quizAttempts: QuizAttempt[];
   currentAttempt: QuizAttempt | null;
+  quizStats: QuizStats | null;
   isLoading: boolean;
   error: string | null;
   
@@ -77,11 +102,14 @@ interface QuizState {
   // Quiz attempt operations
   submitQuizAttempt: (quizId: string, attemptData: QuizAttemptData) => Promise<QuizAttempt>;
   fetchQuizAttempts: (quizId: string) => Promise<void>;
+  fetchMyQuizAttempt: (quizId: string) => Promise<void>;
+  fetchQuizStats: (quizId: string) => Promise<void>;
   
   // Utility functions
   clearError: () => void;
   clearCurrentQuiz: () => void;
   clearCurrentAttempt: () => void;
+  clearQuizStats: () => void;
 }
 
 // Set base URL for API
@@ -104,12 +132,14 @@ export const useQuizStore = create<QuizState>((set, get) => ({
   currentQuiz: null,
   quizAttempts: [],
   currentAttempt: null,
+  quizStats: null,
   isLoading: false,
   error: null,
 
   clearError: () => set({ error: null }),
   clearCurrentQuiz: () => set({ currentQuiz: null }),
   clearCurrentAttempt: () => set({ currentAttempt: null }),
+  clearQuizStats: () => set({ quizStats: null }),
 
   fetchQuizzes: async (courseId: string) => {
     set({ isLoading: true, error: null });
@@ -244,6 +274,39 @@ export const useQuizStore = create<QuizState>((set, get) => ({
       const errorMessage = error.response?.data?.error || 'Failed to fetch quiz attempts';
       set({ error: errorMessage, isLoading: false });
       console.error('Fetch quiz attempts error:', error);
+    }
+  },
+
+  fetchMyQuizAttempt: async (quizId: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await axios.get(`${API_BASE_URL}/quizzes/${quizId}/my-attempt`);
+      const attempt = normalizeQuizAttempt(response.data.data);
+      
+      set({ currentAttempt: attempt, isLoading: false });
+    } catch (error: any) {
+      // 404 is expected if user hasn't attempted the quiz yet
+      if (error.response?.status === 404) {
+        set({ currentAttempt: null, isLoading: false, error: null });
+      } else {
+        const errorMessage = error.response?.data?.error || 'Failed to fetch your quiz attempt';
+        set({ error: errorMessage, isLoading: false });
+        console.error('Fetch my quiz attempt error:', error);
+      }
+    }
+  },
+
+  fetchQuizStats: async (quizId: string) => {
+    set({ isLoading: true, error: null });
+    try {
+      const response = await axios.get(`${API_BASE_URL}/quizzes/${quizId}/stats`);
+      const stats = response.data.data;
+      
+      set({ quizStats: stats, isLoading: false });
+    } catch (error: any) {
+      const errorMessage = error.response?.data?.error || 'Failed to fetch quiz statistics';
+      set({ error: errorMessage, isLoading: false });
+      console.error('Fetch quiz stats error:', error);
     }
   },
 }));

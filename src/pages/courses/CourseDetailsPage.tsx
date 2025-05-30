@@ -4,7 +4,7 @@ import {
   ArrowLeft, Edit, Trash, Plus, Settings, Users, Calendar, 
   Play, FileText, Video, Upload, ExternalLink, ChevronDown, 
   ChevronRight, Clock, BookOpen, AlertCircle, Save, X, 
-  Image as ImageIcon, Link2, Code, Type, Eye, EyeOff
+  Image as ImageIcon, Link2, Code, Type, Eye, EyeOff, MessageCircle
 } from 'lucide-react';
 
 import Button from '../../components/ui/Button';
@@ -12,10 +12,12 @@ import Input from '../../components/ui/Input';
 import { Card, CardContent, CardHeader } from '../../components/ui/Card';
 import RichTextEditor from '../../components/ui/RichTextEditor';
 import FileUpload from '../../components/ui/FileUpload';
+import CourseQuizzesSection from '../../components/CourseQuizzesSection';
 import { useAuthStore } from '../../stores/authStore';
 import { useCourseStore, Section, Subsection } from '../../stores/courseStore';
 import { formatDate } from '../../lib/utils';
 import PDFViewer from '../../components/ui/PDFViewer';
+
 // Add this utility function if it doesn't exist
 const formatFileSize = (bytes: number): string => {
   if (bytes === 0) return '0 Bytes';
@@ -48,6 +50,7 @@ const CourseDetailsPage: React.FC = () => {
   // UI State
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [selectedSubsection, setSelectedSubsection] = useState<Subsection | null>(null);
+  const [activeTab, setActiveTab] = useState<'content' | 'quizzes'>('content');
   const [showAddSection, setShowAddSection] = useState(false);
   const [showAddSubsection, setShowAddSubsection] = useState<string | null>(null);
   const [editingSection, setEditingSection] = useState<string | null>(null);
@@ -112,8 +115,8 @@ const CourseDetailsPage: React.FC = () => {
         difficulty: currentCourse.difficulty
       });
       
-      // Auto-expand first section if available
-      if (currentCourse.sections.length > 0) {
+      // Auto-expand first section if available and we're on content tab
+      if (currentCourse.sections.length > 0 && activeTab === 'content') {
         setExpandedSections(new Set([currentCourse.sections[0].id]));
         
         // Auto-select first subsection if available
@@ -122,7 +125,7 @@ const CourseDetailsPage: React.FC = () => {
         }
       }
     }
-  }, [currentCourse]);
+  }, [currentCourse, activeTab]);
 
   const toggleSectionExpansion = (sectionId: string) => {
     const newExpanded = new Set(expandedSections);
@@ -333,7 +336,7 @@ const CourseDetailsPage: React.FC = () => {
               as={Link}
               to={`/courses/${courseId}/quizzes`}
               variant="outline"
-              icon={<BookOpen className="h-5 w-5" />}
+              icon={<MessageCircle className="h-5 w-5" />}
               disabled={!isOwner}
               title={!isOwner ? "Only course owner can manage quizzes" : "Manage Quizzes"}
             >
@@ -347,22 +350,6 @@ const CourseDetailsPage: React.FC = () => {
         <div className="bg-error-50 text-error-700 p-3 rounded-md mb-4 flex items-center">
           <AlertCircle className="h-5 w-5 mr-2" />
           {error}
-        </div>
-      )}
-
-      {/* Debug info for development */}
-      {process.env.NODE_ENV === 'non_development' && (
-        <div className="bg-yellow-50 border border-yellow-200 rounded-md p-4 mb-4">
-          <h3 className="text-sm font-medium text-yellow-800">Debug Info:</h3>
-          <pre className="text-xs text-yellow-700 mt-1">
-            {JSON.stringify({
-              userId: user?.id,
-              userRole: user?.role,
-              courseCreatedById: currentCourse?.createdBy?._id,
-              isFaculty,
-              isOwner
-            }, null, 2)}
-          </pre>
         </div>
       )}
 
@@ -406,332 +393,381 @@ const CourseDetailsPage: React.FC = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Course Content Sidebar */}
-        <div className="lg:col-span-1">
-          <Card>
-            <CardHeader className="flex justify-between items-center">
-              <div>
-                <h2 className="text-xl font-semibold">Course Content</h2>
-                <p className="text-sm text-gray-500 mt-1">
-                  {currentCourse.sections.length} sections • {currentCourse.totalContent} lessons
-                </p>
+      {/* Tabs Navigation */}
+      <div className="bg-white border border-gray-200 rounded-lg mb-6">
+        <div className="border-b border-gray-200">
+          <nav className="flex space-x-8 px-6" aria-label="Tabs">
+            <button
+              onClick={() => setActiveTab('content')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'content'
+                  ? 'border-primary-500 text-primary-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center">
+                <BookOpen className="h-5 w-5 mr-2" />
+                Course Content
+                <span className="ml-2 bg-gray-100 text-gray-600 px-2 py-1 rounded-full text-xs">
+                  {currentCourse.totalContent}
+                </span>
               </div>
-              {/* Always show add section button for faculty, but disable if not owner */}
-              {isFaculty && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  onClick={() => setShowAddSection(true)}
-                  icon={<Plus className="h-4 w-4" />}
-                  disabled={!isOwner}
-                  title={!isOwner ? "Only course owner can add sections" : "Add Section"}
-                >
-                  Add Section
-                </Button>
-              )}
-            </CardHeader>
-            
-            <CardContent className="p-0">
-              <div className="max-h-96 overflow-y-auto">
-                {currentCourse.sections.length === 0 ? (
-                  <div className="text-center py-8 px-4">
-                    <BookOpen className="h-8 w-8 text-gray-400 mx-auto mb-2" />
-                    <p className="text-sm text-gray-500 mb-3">No sections yet</p>
-                    {isOwner && (
+            </button>
+            <button
+              onClick={() => setActiveTab('quizzes')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'quizzes'
+                  ? 'border-primary-500 text-primary-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              <div className="flex items-center">
+                <MessageCircle className="h-5 w-5 mr-2" />
+                Quizzes
+              </div>
+            </button>
+          </nav>
+        </div>
+
+        {/* Tab Content */}
+        <div className="p-6">
+          {activeTab === 'content' ? (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Course Content Sidebar */}
+              <div className="lg:col-span-1">
+                <Card>
+                  <CardHeader className="flex justify-between items-center">
+                    <div>
+                      <h2 className="text-xl font-semibold">Course Content</h2>
+                      <p className="text-sm text-gray-500 mt-1">
+                        {currentCourse.sections.length} sections • {currentCourse.totalContent} lessons
+                      </p>
+                    </div>
+                    {/* Always show add section button for faculty, but disable if not owner */}
+                    {isFaculty && (
                       <Button
                         size="sm"
+                        variant="ghost"
                         onClick={() => setShowAddSection(true)}
                         icon={<Plus className="h-4 w-4" />}
+                        disabled={!isOwner}
+                        title={!isOwner ? "Only course owner can add sections" : "Add Section"}
                       >
-                        Add First Section
+                        Add Section
                       </Button>
                     )}
-                  </div>
-                ) : (
-                  currentCourse.sections.map((section, sectionIndex) => (
-                    <div key={section.id} className="border-b border-gray-200 last:border-b-0">
-                      <div className="flex items-center justify-between p-4 hover:bg-gray-50">
-                        <button
-                          onClick={() => toggleSectionExpansion(section.id)}
-                          className="flex items-center flex-1 text-left"
-                        >
-                          {expandedSections.has(section.id) ? (
-                            <ChevronDown className="h-4 w-4 mr-2" />
-                          ) : (
-                            <ChevronRight className="h-4 w-4 mr-2" />
-                          )}
-                          <span className="font-medium">{section.title}</span>
-                          <span className="ml-2 text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded">
-                            {section.subsections.length}
-                          </span>
-                        </button>
-                        
-                        {isFaculty && (
-                          <div className="flex space-x-1 ml-2">
+                  </CardHeader>
+                  
+                  <CardContent className="p-0">
+                    <div className="max-h-96 overflow-y-auto">
+                      {currentCourse.sections.length === 0 ? (
+                        <div className="text-center py-8 px-4">
+                          <BookOpen className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                          <p className="text-sm text-gray-500 mb-3">No sections yet</p>
+                          {isOwner && (
                             <Button
                               size="sm"
-                              variant="ghost"
-                              onClick={() => startEditingSection(section)}
-                              icon={<Edit className="h-3 w-3" />}
-                              disabled={!isOwner}
-                              title={!isOwner ? "Only course owner can edit" : "Edit Section"}
-                            />
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleDeleteSection(section.id)}
-                              icon={<Trash className="h-3 w-3" />}
-                              className="text-error-600 hover:text-error-700"
-                              disabled={!isOwner}
-                              title={!isOwner ? "Only course owner can delete" : "Delete Section"}
-                            />
-                          </div>
-                        )}
-                      </div>
-                      
-                      {expandedSections.has(section.id) && (
-                        <div className="pl-6 pb-2">
-                          {section.subsections.map((subsection, subsectionIndex) => (
-                            <button
-                              key={subsection.id}
-                              onClick={() => setSelectedSubsection(subsection)}
-                              className={`w-full text-left p-3 rounded-md mb-1 flex items-center justify-between group ${
-                                selectedSubsection?.id === subsection.id
-                                  ? 'bg-primary-50 text-primary-700 border border-primary-200'
-                                  : 'hover:bg-gray-50'
-                              }`}
-                            >
-                              <div className="flex items-center">
-                                {subsection.contentType === 'video' && <Play className="h-4 w-4 mr-2" />}
-                                {subsection.contentType === 'file' && <FileText className="h-4 w-4 mr-2" />}
-                                {subsection.contentType === 'text' && <Type className="h-4 w-4 mr-2" />}
-                                {subsection.contentType === 'quiz' && <BookOpen className="h-4 w-4 mr-2" />}
-                                {subsection.contentType === 'embed' && <ExternalLink className="h-4 w-4 mr-2" />}
-                                {subsection.contentType === 'link' && <Link2 className="h-4 w-4 mr-2" />}
-                                <span className="text-sm">{subsection.title}</span>
-                              </div>
-                              
-                              {isFaculty && (
-                                <div className="opacity-0 group-hover:opacity-100 flex space-x-1">
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      startEditingSubsection(subsection);
-                                    }}
-                                    icon={<Edit className="h-3 w-3" />}
-                                    disabled={!isOwner}
-                                    title={!isOwner ? "Only course owner can edit" : "Edit Content"}
-                                  />
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleDeleteSubsection(section.id, subsection.id);
-                                    }}
-                                    icon={<Trash className="h-3 w-3" />}
-                                    className="text-error-600 hover:text-error-700"
-                                    disabled={!isOwner}
-                                    title={!isOwner ? "Only course owner can delete" : "Delete Content"}
-                                  />
-                                </div>
-                              )}
-                            </button>
-                          ))}
-                          
-                          {isFaculty && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => setShowAddSubsection(section.id)}
+                              onClick={() => setShowAddSection(true)}
                               icon={<Plus className="h-4 w-4" />}
-                              className="w-full mt-2"
-                              disabled={!isOwner}
-                              title={!isOwner ? "Only course owner can add content" : "Add Content"}
                             >
-                              Add Content
+                              Add First Section
                             </Button>
                           )}
                         </div>
+                      ) : (
+                        currentCourse.sections.map((section, sectionIndex) => (
+                          <div key={section.id} className="border-b border-gray-200 last:border-b-0">
+                            <div className="flex items-center justify-between p-4 hover:bg-gray-50">
+                              <button
+                                onClick={() => toggleSectionExpansion(section.id)}
+                                className="flex items-center flex-1 text-left"
+                              >
+                                {expandedSections.has(section.id) ? (
+                                  <ChevronDown className="h-4 w-4 mr-2" />
+                                ) : (
+                                  <ChevronRight className="h-4 w-4 mr-2" />
+                                )}
+                                <span className="font-medium">{section.title}</span>
+                                <span className="ml-2 text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded">
+                                  {section.subsections.length}
+                                </span>
+                              </button>
+                              
+                              {isFaculty && (
+                                <div className="flex space-x-1 ml-2">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => startEditingSection(section)}
+                                    icon={<Edit className="h-3 w-3" />}
+                                    disabled={!isOwner}
+                                    title={!isOwner ? "Only course owner can edit" : "Edit Section"}
+                                  />
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => handleDeleteSection(section.id)}
+                                    icon={<Trash className="h-3 w-3" />}
+                                    className="text-error-600 hover:text-error-700"
+                                    disabled={!isOwner}
+                                    title={!isOwner ? "Only course owner can delete" : "Delete Section"}
+                                  />
+                                </div>
+                              )}
+                            </div>
+                            
+                            {expandedSections.has(section.id) && (
+                              <div className="pl-6 pb-2">
+                                {section.subsections.map((subsection, subsectionIndex) => (
+                                  <button
+                                    key={subsection.id}
+                                    onClick={() => setSelectedSubsection(subsection)}
+                                    className={`w-full text-left p-3 rounded-md mb-1 flex items-center justify-between group ${
+                                      selectedSubsection?.id === subsection.id
+                                        ? 'bg-primary-50 text-primary-700 border border-primary-200'
+                                        : 'hover:bg-gray-50'
+                                    }`}
+                                  >
+                                    <div className="flex items-center">
+                                      {subsection.contentType === 'video' && <Play className="h-4 w-4 mr-2" />}
+                                      {subsection.contentType === 'file' && <FileText className="h-4 w-4 mr-2" />}
+                                      {subsection.contentType === 'text' && <Type className="h-4 w-4 mr-2" />}
+                                      {subsection.contentType === 'quiz' && <BookOpen className="h-4 w-4 mr-2" />}
+                                      {subsection.contentType === 'embed' && <ExternalLink className="h-4 w-4 mr-2" />}
+                                      {subsection.contentType === 'link' && <Link2 className="h-4 w-4 mr-2" />}
+                                      <span className="text-sm">{subsection.title}</span>
+                                    </div>
+                                    
+                                    {isFaculty && (
+                                      <div className="opacity-0 group-hover:opacity-100 flex space-x-1">
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            startEditingSubsection(subsection);
+                                          }}
+                                          icon={<Edit className="h-3 w-3" />}
+                                          disabled={!isOwner}
+                                          title={!isOwner ? "Only course owner can edit" : "Edit Content"}
+                                        />
+                                        <Button
+                                          size="sm"
+                                          variant="ghost"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleDeleteSubsection(section.id, subsection.id);
+                                          }}
+                                          icon={<Trash className="h-3 w-3" />}
+                                          className="text-error-600 hover:text-error-700"
+                                          disabled={!isOwner}
+                                          title={!isOwner ? "Only course owner can delete" : "Delete Content"}
+                                        />
+                                      </div>
+                                    )}
+                                  </button>
+                                ))}
+                                
+                                {isFaculty && (
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => setShowAddSubsection(section.id)}
+                                    icon={<Plus className="h-4 w-4" />}
+                                    className="w-full mt-2"
+                                    disabled={!isOwner}
+                                    title={!isOwner ? "Only course owner can add content" : "Add Content"}
+                                  >
+                                    Add Content
+                                  </Button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        ))
                       )}
                     </div>
-                  ))
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Main Content Area */}
+              <div className="lg:col-span-2">
+                {selectedSubsection ? (
+                  <Card>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <h3 className="text-xl font-semibold">{selectedSubsection.title}</h3>
+                        <div className="flex items-center space-x-2">
+                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            selectedSubsection.contentType === 'video' ? 'bg-purple-100 text-purple-800' :
+                            selectedSubsection.contentType === 'file' ? 'bg-blue-100 text-blue-800' :
+                            selectedSubsection.contentType === 'quiz' ? 'bg-yellow-100 text-yellow-800' :
+                            selectedSubsection.contentType === 'embed' ? 'bg-green-100 text-green-800' :
+                            selectedSubsection.contentType === 'link' ? 'bg-indigo-100 text-indigo-800' :
+                            'bg-gray-100 text-gray-800'
+                          }`}>
+                            {selectedSubsection.contentType}
+                          </span>
+                          {selectedSubsection.fileUrl && (
+                            <Button
+                              as="a"
+                              href={selectedSubsection.fileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              variant="ghost"
+                              size="sm"
+                              icon={<ExternalLink className="h-4 w-4" />}
+                              title="Open in new tab"
+                            />
+                          )}
+                        </div>
+                      </div>
+                    </CardHeader>
+                    
+                    <CardContent>
+                      {/* Video Content */}
+                      {selectedSubsection.contentType === 'video' && selectedSubsection.videoUrl && (
+                        <div className="mb-6">
+                          <div className="relative rounded-lg overflow-hidden bg-black">
+                            <iframe
+                              src={selectedSubsection.videoUrl}
+                              className="w-full h-64 md:h-96"
+                              allowFullScreen
+                              title={selectedSubsection.title}
+                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                            />
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Enhanced File Content with PDF Viewer */}
+                      {selectedSubsection.contentType === 'file' && selectedSubsection.fileUrl && (
+                        <div className="mb-6">
+                          <PDFViewer 
+                            fileUrl={selectedSubsection.fileUrl}
+                            fileName={selectedSubsection.metadata?.fileName || selectedSubsection.title}
+                            height="600px"
+                            showControls={true}
+                            allowDownload={true}
+                            className="shadow-sm"
+                          />
+                        </div>
+                      )}
+
+                      {/* Embed Content */}
+                      {selectedSubsection.contentType === 'embed' && selectedSubsection.embedUrl && (
+                        <div className="mb-6">
+                          <div className="border border-gray-200 rounded-lg overflow-hidden">
+                            <iframe
+                              src={selectedSubsection.embedUrl}
+                              className="w-full h-96"
+                              title={selectedSubsection.title}
+                              allow="fullscreen"
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Link Content */}
+                      {selectedSubsection.contentType === 'link' && selectedSubsection.linkUrl && (
+                        <div className="mb-6">
+                          <div className="border border-gray-200 rounded-lg p-6 text-center">
+                            <ExternalLink className="h-12 w-12 text-primary-600 mx-auto mb-4" />
+                            <h4 className="text-lg font-medium text-gray-900 mb-2">External Resource</h4>
+                            <p className="text-gray-600 mb-4">Click the button below to access this resource</p>
+                            <Button
+                              as="a"
+                              href={selectedSubsection.linkUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              variant="primary"
+                              icon={<ExternalLink className="h-4 w-4" />}
+                            >
+                              Open Resource
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                      
+                      {/* Text Content */}
+                      {selectedSubsection.content && (
+                        <div 
+                          className="prose prose-sm max-w-none"
+                          dangerouslySetInnerHTML={{ __html: selectedSubsection.content }}
+                        />
+                      )}
+
+                      {/* File Metadata */}
+                      {selectedSubsection.metadata && (
+                        <div className="mt-6 pt-6 border-t border-gray-200">
+                          <h4 className="text-sm font-medium text-gray-700 mb-3">File Information</h4>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                            {selectedSubsection.metadata.fileName && (
+                              <div>
+                                <span className="text-gray-500">File Name:</span>
+                                <p className="font-medium truncate">{selectedSubsection.metadata.fileName}</p>
+                              </div>
+                            )}
+                            {selectedSubsection.metadata.fileSize && (
+                              <div>
+                                <span className="text-gray-500">Size:</span>
+                                <p className="font-medium">{formatFileSize(selectedSubsection.metadata.fileSize)}</p>
+                              </div>
+                            )}
+                            {selectedSubsection.metadata.mimeType && (
+                              <div>
+                                <span className="text-gray-500">Type:</span>
+                                <p className="font-medium">{selectedSubsection.metadata.mimeType}</p>
+                              </div>
+                            )}
+                            {selectedSubsection.metadata.duration && (
+                              <div>
+                                <span className="text-gray-500">Duration:</span>
+                                <p className="font-medium">{selectedSubsection.metadata.duration} min</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <Card>
+                    <CardContent className="text-center py-12">
+                      <BookOpen className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                      <h3 className="text-lg font-medium text-gray-900 mb-2">
+                        {currentCourse.sections.length === 0 
+                          ? 'No content yet' 
+                          : 'Select content to view'}
+                      </h3>
+                      <p className="text-gray-500 mb-4">
+                        {currentCourse.sections.length === 0 
+                          ? 'Start by adding your first section and content'
+                          : 'Choose a lesson from the sidebar to start learning'}
+                      </p>
+                      {isOwner && currentCourse.sections.length === 0 && (
+                        <Button
+                          onClick={() => setShowAddSection(true)}
+                          icon={<Plus className="h-4 w-4" />}
+                        >
+                          Add First Section
+                        </Button>
+                      )}
+                    </CardContent>
+                  </Card>
                 )}
               </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Main Content Area */}
-<div className="lg:col-span-2">
-  {selectedSubsection ? (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <h3 className="text-xl font-semibold">{selectedSubsection.title}</h3>
-          <div className="flex items-center space-x-2">
-            <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-              selectedSubsection.contentType === 'video' ? 'bg-purple-100 text-purple-800' :
-              selectedSubsection.contentType === 'file' ? 'bg-blue-100 text-blue-800' :
-              selectedSubsection.contentType === 'quiz' ? 'bg-yellow-100 text-yellow-800' :
-              selectedSubsection.contentType === 'embed' ? 'bg-green-100 text-green-800' :
-              selectedSubsection.contentType === 'link' ? 'bg-indigo-100 text-indigo-800' :
-              'bg-gray-100 text-gray-800'
-            }`}>
-              {selectedSubsection.contentType}
-            </span>
-            {selectedSubsection.fileUrl && (
-              <Button
-                as="a"
-                href={selectedSubsection.fileUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                variant="ghost"
-                size="sm"
-                icon={<ExternalLink className="h-4 w-4" />}
-                title="Open in new tab"
-              />
-            )}
-          </div>
-        </div>
-      </CardHeader>
-      
-      <CardContent>
-        {/* Video Content */}
-        {selectedSubsection.contentType === 'video' && selectedSubsection.videoUrl && (
-          <div className="mb-6">
-            <div className="relative rounded-lg overflow-hidden bg-black">
-              <iframe
-                src={selectedSubsection.videoUrl}
-                className="w-full h-64 md:h-96"
-                allowFullScreen
-                title={selectedSubsection.title}
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-              />
             </div>
-          </div>
-        )}
-        
-        {/* Enhanced File Content with PDF Viewer */}
-        {selectedSubsection.contentType === 'file' && selectedSubsection.fileUrl && (
-          <div className="mb-6">
-            <PDFViewer 
-              fileUrl={selectedSubsection.fileUrl}
-              fileName={selectedSubsection.metadata?.fileName || selectedSubsection.title}
-              height="600px"
-              showControls={true}
-              allowDownload={true}
-              className="shadow-sm"
+          ) : (
+            /* Quizzes Tab Content */
+            <CourseQuizzesSection 
+              courseId={courseId!}
+              isOwner={isOwner}
+              isFaculty={isFaculty}
             />
-          </div>
-        )}
-
-        {/* Embed Content */}
-        {selectedSubsection.contentType === 'embed' && selectedSubsection.embedUrl && (
-          <div className="mb-6">
-            <div className="border border-gray-200 rounded-lg overflow-hidden">
-              <iframe
-                src={selectedSubsection.embedUrl}
-                className="w-full h-96"
-                title={selectedSubsection.title}
-                allow="fullscreen"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Link Content */}
-        {selectedSubsection.contentType === 'link' && selectedSubsection.linkUrl && (
-          <div className="mb-6">
-            <div className="border border-gray-200 rounded-lg p-6 text-center">
-              <ExternalLink className="h-12 w-12 text-primary-600 mx-auto mb-4" />
-              <h4 className="text-lg font-medium text-gray-900 mb-2">External Resource</h4>
-              <p className="text-gray-600 mb-4">Click the button below to access this resource</p>
-              <Button
-                as="a"
-                href={selectedSubsection.linkUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                variant="primary"
-                icon={<ExternalLink className="h-4 w-4" />}
-              >
-                Open Resource
-              </Button>
-            </div>
-          </div>
-        )}
-        
-        {/* Text Content */}
-        {selectedSubsection.content && (
-          <div 
-            className="prose prose-sm max-w-none"
-            dangerouslySetInnerHTML={{ __html: selectedSubsection.content }}
-          />
-        )}
-
-        {/* File Metadata */}
-        {selectedSubsection.metadata && (
-          <div className="mt-6 pt-6 border-t border-gray-200">
-            <h4 className="text-sm font-medium text-gray-700 mb-3">File Information</h4>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-              {selectedSubsection.metadata.fileName && (
-                <div>
-                  <span className="text-gray-500">File Name:</span>
-                  <p className="font-medium truncate">{selectedSubsection.metadata.fileName}</p>
-                </div>
-              )}
-              {selectedSubsection.metadata.fileSize && (
-                <div>
-                  <span className="text-gray-500">Size:</span>
-                  <p className="font-medium">{formatFileSize(selectedSubsection.metadata.fileSize)}</p>
-                </div>
-              )}
-              {selectedSubsection.metadata.mimeType && (
-                <div>
-                  <span className="text-gray-500">Type:</span>
-                  <p className="font-medium">{selectedSubsection.metadata.mimeType}</p>
-                </div>
-              )}
-              {selectedSubsection.metadata.duration && (
-                <div>
-                  <span className="text-gray-500">Duration:</span>
-                  <p className="font-medium">{selectedSubsection.metadata.duration} min</p>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  ) : (
-    <Card>
-      <CardContent className="text-center py-12">
-        <BookOpen className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-        <h3 className="text-lg font-medium text-gray-900 mb-2">
-          {currentCourse.sections.length === 0 
-            ? 'No content yet' 
-            : 'Select content to view'}
-        </h3>
-        <p className="text-gray-500 mb-4">
-          {currentCourse.sections.length === 0 
-            ? 'Start by adding your first section and content'
-            : 'Choose a lesson from the sidebar to start learning'}
-        </p>
-        {isOwner && currentCourse.sections.length === 0 && (
-          <Button
-            onClick={() => setShowAddSection(true)}
-            icon={<Plus className="h-4 w-4" />}
-          >
-            Add First Section
-          </Button>
-        )}
-      </CardContent>
-    </Card>
-  )}
-</div>
+          )}
+        </div>
       </div>
 
       {/* Add Section Modal */}
