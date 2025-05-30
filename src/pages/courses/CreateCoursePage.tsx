@@ -44,9 +44,6 @@ const CreateCoursePage: React.FC = () => {
   const [createError, setCreateError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
-  // Get API base URL for file uploads
-  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-  
   const categories = [
     'Computer Science', 'Mathematics', 'Physics', 'Chemistry', 'Biology',
     'Engineering', 'Business', 'Arts', 'Language', 'Other'
@@ -106,6 +103,8 @@ const CreateCoursePage: React.FC = () => {
   // Handle form submission
   const onSubmit = async (data: CourseFormValues) => {
     console.log('Form submitted with data:', data);
+    console.log('Cover image value:', data.coverImage);
+    console.log('Cover image preview:', coverImagePreview);
     setCreateError(null);
     setIsSubmitting(true);
     
@@ -144,6 +143,7 @@ const CreateCoursePage: React.FC = () => {
       };
       
       console.log('Creating course with processed data:', courseData);
+      console.log('Final cover image value:', courseData.coverImage);
       
       const newCourse = await createCourse(courseData);
       console.log('Course created successfully:', newCourse);
@@ -170,13 +170,17 @@ const CreateCoursePage: React.FC = () => {
   
   // Handle file upload for cover image - Fixed URL handling
   const handleFileUpload = (fileUrl: string, metadata?: any) => {
-    console.log('File uploaded:', fileUrl, metadata);
+    console.log('File uploaded for cover image:', fileUrl, metadata);
     
-    // Convert relative URL to absolute URL
-    const absoluteUrl = fileUrl.startsWith('http') ? fileUrl : `${API_BASE_URL}${fileUrl}`;
-    
-    setValue('coverImage', absoluteUrl, { shouldValidate: true });
-    setCoverImagePreview(absoluteUrl);
+    // Ensure we have a valid file URL
+    if (fileUrl && fileUrl.trim()) {
+      setValue('coverImage', fileUrl, { shouldValidate: true });
+      setCoverImagePreview(fileUrl);
+      console.log('Cover image set to:', fileUrl);
+    } else {
+      console.error('Invalid file URL received:', fileUrl);
+      setCreateError('Failed to get file URL from upload');
+    }
   };
   
   // Set image preview from URL
@@ -206,7 +210,7 @@ const CreateCoursePage: React.FC = () => {
     } else if (!coverImageUrl && coverImagePreview) {
       setCoverImagePreview(null);
     }
-  }, [coverImageUrl]);
+  }, [coverImageUrl, coverImagePreview]);
 
   // Handle navigation back
   const handleCancel = () => {
@@ -229,6 +233,18 @@ const CreateCoursePage: React.FC = () => {
           <div>
             <p className="font-medium">Error creating course</p>
             <p className="text-sm mt-1">{error || createError}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Debug info - remove this in production */}
+      {process.env.NODE_ENV === 'development' && (
+        <div className="bg-blue-50 border border-blue-200 rounded-md p-4 mb-6">
+          <h3 className="text-sm font-medium text-blue-800 mb-2">Debug Info:</h3>
+          <div className="text-xs text-blue-700">
+            <p><strong>Cover Image (form value):</strong> {coverImageUrl || 'Not set'}</p>
+            <p><strong>Cover Image (preview):</strong> {coverImagePreview || 'Not set'}</p>
+            <p><strong>Match:</strong> {coverImageUrl === coverImagePreview ? 'Yes' : 'No'}</p>
           </div>
         </div>
       )}

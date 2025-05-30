@@ -31,7 +31,10 @@ const FileUpload: React.FC<FileUploadProps> = ({
   const [urlMode, setUrlMode] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+  // Fixed API URL handling based on your .env configuration
+  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
+  // Server base URL for file access (without /api/v1)
+  const SERVER_BASE_URL = API_BASE_URL.replace('/api/v1', '') || 'http://localhost:5000';
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -102,14 +105,29 @@ const FileUpload: React.FC<FileUploadProps> = ({
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await axios.post(`${API_BASE_URL}/api/v1/courses/upload`, formData, {
+      // Get auth token from localStorage or auth store
+      const authStorage = localStorage.getItem('auth-storage');
+      let token = '';
+      if (authStorage) {
+        try {
+          const { state } = JSON.parse(authStorage);
+          token = state?.token || '';
+        } catch (error) {
+          console.error('Error parsing auth storage:', error);
+        }
+      }
+
+      // Use API_BASE_URL which includes /api/v1 for the upload endpoint
+      const response = await axios.post(`${API_BASE_URL}/courses/upload`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
-          'Authorization': axios.defaults.headers.common['Authorization'] || ''
+          'Authorization': token ? `Bearer ${token}` : ''
         },
         onUploadProgress: (progressEvent) => {
-          const progress = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1));
-          setUploadProgress(progress);
+          if (progressEvent.total) {
+            const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            setUploadProgress(progress);
+          }
         },
       });
 
@@ -123,18 +141,20 @@ const FileUpload: React.FC<FileUploadProps> = ({
 
       setUploadedFiles(prev => [...prev, uploadedFile]);
       
-      // Return the absolute URL for the uploaded file
+      // FIXED: Use SERVER_BASE_URL (without /api/v1) for file access
+      // This ensures cover images work properly
       const absoluteFileUrl = uploadedFile.fileUrl.startsWith('http') 
         ? uploadedFile.fileUrl 
-        : `${API_BASE_URL}${uploadedFile.fileUrl}`;
+        : `${SERVER_BASE_URL}${uploadedFile.fileUrl}`;
       
+      console.log('File URL returned:', absoluteFileUrl);
       onFileUpload(absoluteFileUrl, uploadedFile);
       
       setUploading(false);
       setUploadProgress(0);
     } catch (error: any) {
       console.error('Upload error:', error);
-      setError(error.response?.data?.error || 'Upload failed');
+      setError(error.response?.data?.error || error.message || 'Upload failed');
       setUploading(false);
       setUploadProgress(0);
     }
@@ -189,6 +209,7 @@ const FileUpload: React.FC<FileUploadProps> = ({
     };
 
     setUploadedFiles(prev => [...prev, externalFile]);
+    console.log('Calling onFileUpload with external URL:', processedUrl);
     onFileUpload(processedUrl, externalFile);
     setExternalUrl('');
     setUrlMode(false);
@@ -223,7 +244,10 @@ const FileUpload: React.FC<FileUploadProps> = ({
         <div className="flex space-x-2 mb-4">
           <button
             type="button"
-            onClick={() => setUrlMode(false)}
+            onClick={() => {
+              setUrlMode(false);
+              setError(null);
+            }}
             className={cn(
               "px-3 py-1 text-sm rounded-md border",
               !urlMode 
@@ -236,7 +260,10 @@ const FileUpload: React.FC<FileUploadProps> = ({
           </button>
           <button
             type="button"
-            onClick={() => setUrlMode(true)}
+            onClick={() => {
+              setUrlMode(true);
+              setError(null);
+            }}
             className={cn(
               "px-3 py-1 text-sm rounded-md border",
               urlMode 
@@ -272,6 +299,7 @@ const FileUpload: React.FC<FileUploadProps> = ({
               type="button"
               onClick={handleExternalUrl}
               className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500"
+              disabled={!externalUrl.trim()}
             >
               Add
             </button>
@@ -291,7 +319,7 @@ const FileUpload: React.FC<FileUploadProps> = ({
         /* File Upload Mode */
         <div
           className={cn(
-            "border-2 border-dashed rounded-lg p-6 text-center transition-colors",
+            "border-2 border-dashed rounded-lg p-6 text-center transition-colors cursor-pointer",
             isDragging 
               ? "border-primary-500 bg-primary-50" 
               : "border-gray-300 hover:border-gray-400",
@@ -300,7 +328,7 @@ const FileUpload: React.FC<FileUploadProps> = ({
           onDragOver={handleDragOver}
           onDragLeave={handleDragLeave}
           onDrop={handleDrop}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => !uploading && fileInputRef.current?.click()}
         >
           <input
             ref={fileInputRef}
@@ -333,7 +361,7 @@ const FileUpload: React.FC<FileUploadProps> = ({
                   <span className="font-medium">Click to upload</span> or drag and drop
                 </p>
                 <p className="text-xs text-gray-500">
-                  Max file size: {maxSize}MB • {accept.split(',').length} file types supported
+                  Max file size: {maxSize}MB • Supported file types
                 </p>
                 <p className="text-xs text-gray-400">
                   {placeholder}

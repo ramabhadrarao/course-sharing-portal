@@ -67,8 +67,22 @@ const CourseDetailsPage: React.FC = () => {
     difficulty: ''
   });
 
+  // Fixed user permission check - handle both id and _id fields
   const isFaculty = user?.role === 'faculty' || user?.role === 'admin';
-  const isOwner = isFaculty && currentCourse?.createdBy.id === user?.id;
+  const userId = user?.id || user?._id;
+  const courseCreatedById = currentCourse?.createdBy?._id || currentCourse?.createdBy?.id;
+  const isOwner = isFaculty && userId === courseCreatedById;
+
+  console.log('Debug permissions:', {
+    fullUser: user,
+    userId: userId,
+    userRole: user?.role,
+    isFaculty,
+    courseCreatedBy: courseCreatedById,
+    isOwner,
+    comparison: `${userId} === ${courseCreatedById} = ${userId === courseCreatedById}`,
+    currentCourse: currentCourse?.title
+  });
 
   useEffect(() => {
     if (courseId) {
@@ -294,12 +308,15 @@ const CourseDetailsPage: React.FC = () => {
           </Button>
         </div>
         
-        {isOwner && (
+        {/* Always show buttons for faculty/admin, but enable/disable based on ownership */}
+        {isFaculty && (
           <div className="mt-4 md:mt-0 flex space-x-2">
             <Button
               variant="outline"
               onClick={() => setShowCourseSettings(true)}
               icon={<Settings className="h-5 w-5" />}
+              disabled={!isOwner}
+              title={!isOwner ? "Only course owner can edit settings" : "Course Settings"}
             >
               Course Settings
             </Button>
@@ -308,6 +325,8 @@ const CourseDetailsPage: React.FC = () => {
               to={`/courses/${courseId}/quizzes`}
               variant="outline"
               icon={<BookOpen className="h-5 w-5" />}
+              disabled={!isOwner}
+              title={!isOwner ? "Only course owner can manage quizzes" : "Manage Quizzes"}
             >
               Manage Quizzes
             </Button>
@@ -319,6 +338,22 @@ const CourseDetailsPage: React.FC = () => {
         <div className="bg-error-50 text-error-700 p-3 rounded-md mb-4 flex items-center">
           <AlertCircle className="h-5 w-5 mr-2" />
           {error}
+        </div>
+      )}
+
+      {/* Debug info for development */}
+      {process.env.NODE_ENV === 'non_development' && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-md p-4 mb-4">
+          <h3 className="text-sm font-medium text-yellow-800">Debug Info:</h3>
+          <pre className="text-xs text-yellow-700 mt-1">
+            {JSON.stringify({
+              userId: user?.id,
+              userRole: user?.role,
+              courseCreatedById: currentCourse?.createdBy?._id,
+              isFaculty,
+              isOwner
+            }, null, 2)}
+          </pre>
         </div>
       )}
 
@@ -373,12 +408,15 @@ const CourseDetailsPage: React.FC = () => {
                   {currentCourse.sections.length} sections • {currentCourse.totalContent} lessons
                 </p>
               </div>
-              {isOwner && (
+              {/* Always show add section button for faculty, but disable if not owner */}
+              {isFaculty && (
                 <Button
                   size="sm"
                   variant="ghost"
                   onClick={() => setShowAddSection(true)}
                   icon={<Plus className="h-4 w-4" />}
+                  disabled={!isOwner}
+                  title={!isOwner ? "Only course owner can add sections" : "Add Section"}
                 >
                   Add Section
                 </Button>
@@ -387,106 +425,132 @@ const CourseDetailsPage: React.FC = () => {
             
             <CardContent className="p-0">
               <div className="max-h-96 overflow-y-auto">
-                {currentCourse.sections.map((section, sectionIndex) => (
-                  <div key={section.id} className="border-b border-gray-200 last:border-b-0">
-                    <div className="flex items-center justify-between p-4 hover:bg-gray-50">
-                      <button
-                        onClick={() => toggleSectionExpansion(section.id)}
-                        className="flex items-center flex-1 text-left"
+                {currentCourse.sections.length === 0 ? (
+                  <div className="text-center py-8 px-4">
+                    <BookOpen className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                    <p className="text-sm text-gray-500 mb-3">No sections yet</p>
+                    {isOwner && (
+                      <Button
+                        size="sm"
+                        onClick={() => setShowAddSection(true)}
+                        icon={<Plus className="h-4 w-4" />}
                       >
-                        {expandedSections.has(section.id) ? (
-                          <ChevronDown className="h-4 w-4 mr-2" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4 mr-2" />
+                        Add First Section
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  currentCourse.sections.map((section, sectionIndex) => (
+                    <div key={section.id} className="border-b border-gray-200 last:border-b-0">
+                      <div className="flex items-center justify-between p-4 hover:bg-gray-50">
+                        <button
+                          onClick={() => toggleSectionExpansion(section.id)}
+                          className="flex items-center flex-1 text-left"
+                        >
+                          {expandedSections.has(section.id) ? (
+                            <ChevronDown className="h-4 w-4 mr-2" />
+                          ) : (
+                            <ChevronRight className="h-4 w-4 mr-2" />
+                          )}
+                          <span className="font-medium">{section.title}</span>
+                          <span className="ml-2 text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded">
+                            {section.subsections.length}
+                          </span>
+                        </button>
+                        
+                        {isFaculty && (
+                          <div className="flex space-x-1 ml-2">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => startEditingSection(section)}
+                              icon={<Edit className="h-3 w-3" />}
+                              disabled={!isOwner}
+                              title={!isOwner ? "Only course owner can edit" : "Edit Section"}
+                            />
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleDeleteSection(section.id)}
+                              icon={<Trash className="h-3 w-3" />}
+                              className="text-error-600 hover:text-error-700"
+                              disabled={!isOwner}
+                              title={!isOwner ? "Only course owner can delete" : "Delete Section"}
+                            />
+                          </div>
                         )}
-                        <span className="font-medium">{section.title}</span>
-                        <span className="ml-2 text-xs bg-gray-200 text-gray-600 px-2 py-1 rounded">
-                          {section.subsections.length}
-                        </span>
-                      </button>
+                      </div>
                       
-                      {isOwner && (
-                        <div className="flex space-x-1 ml-2">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => startEditingSection(section)}
-                            icon={<Edit className="h-3 w-3" />}
-                          />
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleDeleteSection(section.id)}
-                            icon={<Trash className="h-3 w-3" />}
-                            className="text-error-600 hover:text-error-700"
-                          />
+                      {expandedSections.has(section.id) && (
+                        <div className="pl-6 pb-2">
+                          {section.subsections.map((subsection, subsectionIndex) => (
+                            <button
+                              key={subsection.id}
+                              onClick={() => setSelectedSubsection(subsection)}
+                              className={`w-full text-left p-3 rounded-md mb-1 flex items-center justify-between group ${
+                                selectedSubsection?.id === subsection.id
+                                  ? 'bg-primary-50 text-primary-700 border border-primary-200'
+                                  : 'hover:bg-gray-50'
+                              }`}
+                            >
+                              <div className="flex items-center">
+                                {subsection.contentType === 'video' && <Play className="h-4 w-4 mr-2" />}
+                                {subsection.contentType === 'file' && <FileText className="h-4 w-4 mr-2" />}
+                                {subsection.contentType === 'text' && <Type className="h-4 w-4 mr-2" />}
+                                {subsection.contentType === 'quiz' && <BookOpen className="h-4 w-4 mr-2" />}
+                                {subsection.contentType === 'embed' && <ExternalLink className="h-4 w-4 mr-2" />}
+                                {subsection.contentType === 'link' && <Link2 className="h-4 w-4 mr-2" />}
+                                <span className="text-sm">{subsection.title}</span>
+                              </div>
+                              
+                              {isFaculty && (
+                                <div className="opacity-0 group-hover:opacity-100 flex space-x-1">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      startEditingSubsection(subsection);
+                                    }}
+                                    icon={<Edit className="h-3 w-3" />}
+                                    disabled={!isOwner}
+                                    title={!isOwner ? "Only course owner can edit" : "Edit Content"}
+                                  />
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDeleteSubsection(section.id, subsection.id);
+                                    }}
+                                    icon={<Trash className="h-3 w-3" />}
+                                    className="text-error-600 hover:text-error-700"
+                                    disabled={!isOwner}
+                                    title={!isOwner ? "Only course owner can delete" : "Delete Content"}
+                                  />
+                                </div>
+                              )}
+                            </button>
+                          ))}
+                          
+                          {isFaculty && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setShowAddSubsection(section.id)}
+                              icon={<Plus className="h-4 w-4" />}
+                              className="w-full mt-2"
+                              disabled={!isOwner}
+                              title={!isOwner ? "Only course owner can add content" : "Add Content"}
+                            >
+                              Add Content
+                            </Button>
+                          )}
                         </div>
                       )}
                     </div>
-                    
-                    {expandedSections.has(section.id) && (
-                      <div className="pl-6 pb-2">
-                        {section.subsections.map((subsection, subsectionIndex) => (
-                          <button
-                            key={subsection.id}
-                            onClick={() => setSelectedSubsection(subsection)}
-                            className={`w-full text-left p-3 rounded-md mb-1 flex items-center justify-between group ${
-                              selectedSubsection?.id === subsection.id
-                                ? 'bg-primary-50 text-primary-700 border border-primary-200'
-                                : 'hover:bg-gray-50'
-                            }`}
-                          >
-                            <div className="flex items-center">
-                              {subsection.contentType === 'video' && <Play className="h-4 w-4 mr-2" />}
-                              {subsection.contentType === 'file' && <FileText className="h-4 w-4 mr-2" />}
-                              {subsection.contentType === 'text' && <Type className="h-4 w-4 mr-2" />}
-                              {subsection.contentType === 'quiz' && <BookOpen className="h-4 w-4 mr-2" />}
-                              {subsection.contentType === 'embed' && <ExternalLink className="h-4 w-4 mr-2" />}
-                              {subsection.contentType === 'link' && <Link2 className="h-4 w-4 mr-2" />}
-                              <span className="text-sm">{subsection.title}</span>
-                            </div>
-                            
-                            {isOwner && (
-                              <div className="opacity-0 group-hover:opacity-100 flex space-x-1">
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    startEditingSubsection(subsection);
-                                  }}
-                                  icon={<Edit className="h-3 w-3" />}
-                                />
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    handleDeleteSubsection(section.id, subsection.id);
-                                  }}
-                                  icon={<Trash className="h-3 w-3" />}
-                                  className="text-error-600 hover:text-error-700"
-                                />
-                              </div>
-                            )}
-                          </button>
-                        ))}
-                        
-                        {isOwner && (
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => setShowAddSubsection(section.id)}
-                            icon={<Plus className="h-4 w-4" />}
-                            className="w-full mt-2"
-                          >
-                            Add Content
-                          </Button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </CardContent>
           </Card>
@@ -590,11 +654,23 @@ const CourseDetailsPage: React.FC = () => {
               <CardContent className="text-center py-12">
                 <BookOpen className="h-12 w-12 text-gray-400 mx-auto mb-4" />
                 <h3 className="text-lg font-medium text-gray-900 mb-2">
-                  Select content to view
+                  {currentCourse.sections.length === 0 
+                    ? 'No content yet' 
+                    : 'Select content to view'}
                 </h3>
-                <p className="text-gray-500">
-                  Choose a lesson from the sidebar to start learning
+                <p className="text-gray-500 mb-4">
+                  {currentCourse.sections.length === 0 
+                    ? 'Start by adding your first section and content'
+                    : 'Choose a lesson from the sidebar to start learning'}
                 </p>
+                {isOwner && currentCourse.sections.length === 0 && (
+                  <Button
+                    onClick={() => setShowAddSection(true)}
+                    icon={<Plus className="h-4 w-4" />}
+                  >
+                    Add First Section
+                  </Button>
+                )}
               </CardContent>
             </Card>
           )}
