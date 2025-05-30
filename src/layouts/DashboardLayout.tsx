@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { 
   BookOpen, Home, BookText, User, LogOut, Menu, X,
-  PlusCircle, BookmarkPlus
+  PlusCircle, Settings, Users, Shield, MessageCircle
 } from 'lucide-react';
 import { useAuthStore } from '../stores/authStore';
 import { cn } from '../lib/utils';
@@ -31,6 +31,12 @@ const DashboardLayout: React.FC = () => {
     { name: 'Profile', to: '/profile', icon: User },
   ];
 
+  // Admin navigation items
+  const adminItems = user?.role === 'admin' ? [
+    { name: 'Manage Users', to: '/admin/users', icon: Users },
+    { name: 'System Settings', to: '/admin/settings', icon: Settings },
+  ] : [];
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Sidebar for desktop */}
@@ -40,35 +46,103 @@ const DashboardLayout: React.FC = () => {
             <BookOpen className="h-8 w-8 text-white" />
             <span className="ml-2 text-white font-medium text-xl">Course Portal</span>
           </div>
+          
           <div className="mt-8 flex-1 flex flex-col">
             <nav className="flex-1 px-2 space-y-1">
-              {navigationItems.map((item) => {
-                const Icon = item.icon;
-                return (
-                  <NavLink
-                    key={item.name}
-                    to={item.to}
-                    className={({ isActive }) =>
-                      cn(
-                        'group flex items-center px-2 py-2 text-sm font-medium rounded-md',
-                        isActive
-                          ? 'bg-primary-900 text-white'
-                          : 'text-white hover:bg-primary-700'
-                      )
-                    }
-                  >
-                    <Icon className="mr-3 h-5 w-5" />
-                    {item.name}
-                  </NavLink>
-                );
-              })}
-              <button
-                onClick={handleLogout}
-                className="w-full text-left group flex items-center px-2 py-2 text-sm font-medium rounded-md text-white hover:bg-primary-700"
-              >
-                <LogOut className="mr-3 h-5 w-5" />
-                Logout
-              </button>
+              {/* Main Navigation */}
+              <div className="space-y-1">
+                {navigationItems.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <NavLink
+                      key={item.name}
+                      to={item.to}
+                      className={({ isActive }) =>
+                        cn(
+                          'group flex items-center px-2 py-2 text-sm font-medium rounded-md',
+                          isActive
+                            ? 'bg-primary-900 text-white'
+                            : 'text-white hover:bg-primary-700'
+                        )
+                      }
+                    >
+                      <Icon className="mr-3 h-5 w-5" />
+                      {item.name}
+                    </NavLink>
+                  );
+                })}
+              </div>
+
+              {/* Admin Section */}
+              {adminItems.length > 0 && (
+                <div className="pt-6">
+                  <div className="px-2 pb-2">
+                    <div className="flex items-center text-xs font-semibold text-primary-200 uppercase tracking-wider">
+                      <Shield className="mr-2 h-4 w-4" />
+                      Administration
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    {adminItems.map((item) => {
+                      const Icon = item.icon;
+                      return (
+                        <NavLink
+                          key={item.name}
+                          to={item.to}
+                          className={({ isActive }) =>
+                            cn(
+                              'group flex items-center px-2 py-2 text-sm font-medium rounded-md',
+                              isActive
+                                ? 'bg-primary-900 text-white'
+                                : 'text-white hover:bg-primary-700'
+                            )
+                          }
+                        >
+                          <Icon className="mr-3 h-5 w-5" />
+                          {item.name}
+                        </NavLink>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* User Info Section */}
+              <div className="pt-6 mt-auto">
+                <div className="px-2 pb-2">
+                  <div className="flex items-center p-2 rounded-md bg-primary-700">
+                    <div className="flex-shrink-0">
+                      {user?.profileImageUrl ? (
+                        <img
+                          src={user.profileImageUrl}
+                          alt={user.name}
+                          className="h-8 w-8 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="h-8 w-8 bg-primary-200 rounded-full flex items-center justify-center">
+                          <User className="h-5 w-5 text-primary-800" />
+                        </div>
+                      )}
+                    </div>
+                    <div className="ml-3 flex-1 min-w-0">
+                      <p className="text-sm font-medium text-white truncate">
+                        {user?.name}
+                      </p>
+                      <p className="text-xs text-primary-200 capitalize">
+                        {user?.role}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                <button
+                  onClick={handleLogout}
+                  className="w-full text-left group flex items-center px-2 py-2 text-sm font-medium rounded-md text-white hover:bg-primary-700"
+                >
+                  <LogOut className="mr-3 h-5 w-5" />
+                  Logout
+                </button>
+              </div>
             </nav>
           </div>
         </div>
@@ -98,6 +172,7 @@ const DashboardLayout: React.FC = () => {
       {isMobileMenuOpen && (
         <div className="md:hidden">
           <div className="px-2 pt-2 pb-3 space-y-1 bg-primary-700 animate-slide-in">
+            {/* Main Navigation */}
             {navigationItems.map((item) => {
               const Icon = item.icon;
               return (
@@ -121,6 +196,69 @@ const DashboardLayout: React.FC = () => {
                 </NavLink>
               );
             })}
+            
+            {/* Admin Section */}
+            {adminItems.length > 0 && (
+              <>
+                <div className="px-3 py-2">
+                  <div className="flex items-center text-xs font-semibold text-primary-200 uppercase tracking-wider">
+                    <Shield className="mr-2 h-4 w-4" />
+                    Administration
+                  </div>
+                </div>
+                {adminItems.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <NavLink
+                      key={item.name}
+                      to={item.to}
+                      className={({ isActive }) =>
+                        cn(
+                          'block px-3 py-2 rounded-md text-base font-medium',
+                          isActive
+                            ? 'bg-primary-900 text-white'
+                            : 'text-white hover:bg-primary-800'
+                        )
+                      }
+                      onClick={closeMobileMenu}
+                    >
+                      <div className="flex items-center">
+                        <Icon className="mr-3 h-5 w-5" />
+                        {item.name}
+                      </div>
+                    </NavLink>
+                  );
+                })}
+              </>
+            )}
+            
+            {/* User Info */}
+            <div className="px-3 py-2 border-t border-primary-600 mt-4">
+              <div className="flex items-center">
+                <div className="flex-shrink-0">
+                  {user?.profileImageUrl ? (
+                    <img
+                      src={user.profileImageUrl}
+                      alt={user.name}
+                      className="h-8 w-8 rounded-full object-cover"
+                    />
+                  ) : (
+                    <div className="h-8 w-8 bg-primary-200 rounded-full flex items-center justify-center">
+                      <User className="h-5 w-5 text-primary-800" />
+                    </div>
+                  )}
+                </div>
+                <div className="ml-3">
+                  <p className="text-sm font-medium text-white">
+                    {user?.name}
+                  </p>
+                  <p className="text-xs text-primary-200 capitalize">
+                    {user?.role}
+                  </p>
+                </div>
+              </div>
+            </div>
+            
             <button
               onClick={() => {
                 handleLogout();

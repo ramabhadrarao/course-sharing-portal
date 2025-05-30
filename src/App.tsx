@@ -14,6 +14,8 @@ import CoursesPage from './pages/courses/CoursesPage';
 import CourseDetailsPage from './pages/courses/CourseDetailsPage';
 import CreateCoursePage from './pages/courses/CreateCoursePage';
 import ProfilePage from './pages/profile/ProfilePage';
+import AdminUsersPage from './pages/admin/AdminUsersPage';
+import QuizManagementPage from './pages/quizzes/QuizManagementPage';
 import NotFoundPage from './pages/NotFoundPage';
 
 // Protected route wrapper
@@ -31,7 +33,7 @@ const ProtectedRoute = ({
   }
 
   if (user && !allowedRoles.includes(user.role)) {
-    return <Navigate to="/dashboard\" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;
@@ -43,7 +45,7 @@ function App() {
       <Routes>
         {/* Auth routes */}
         <Route path="/" element={<AuthLayout />}>
-          <Route index element={<Navigate to="/login\" replace />} />
+          <Route index element={<Navigate to="/login" replace />} />
           <Route path="login" element={<LoginPage />} />
           <Route path="register" element={<RegisterPage />} />
         </Route>
@@ -57,12 +59,24 @@ function App() {
           <Route path="dashboard" element={<DashboardPage />} />
           <Route path="courses" element={<CoursesPage />} />
           <Route path="courses/:courseId" element={<CourseDetailsPage />} />
+          <Route path="courses/:courseId/quizzes" element={
+            <ProtectedRoute allowedRoles={['faculty', 'admin']}>
+              <QuizManagementPage />
+            </ProtectedRoute>
+          } />
           <Route path="courses/create" element={
             <ProtectedRoute allowedRoles={['faculty', 'admin']}>
               <CreateCoursePage />
             </ProtectedRoute>
           } />
           <Route path="profile" element={<ProfilePage />} />
+          
+          {/* Admin routes */}
+          <Route path="admin/users" element={
+            <ProtectedRoute allowedRoles={['admin']}>
+              <AdminUsersPage />
+            </ProtectedRoute>
+          } />
         </Route>
 
         {/* 404 route */}
