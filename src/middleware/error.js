@@ -1,5 +1,6 @@
-const ErrorResponse = require('../utils/errorResponse');
-const logger = require('../utils/logger');
+// ===== src/middleware/error.js =====
+import ErrorResponse from '../utils/errorResponse.js';
+import logger from '../utils/logger.js';
 
 const errorHandler = (err, req, res, next) => {
   let error = { ...err };
@@ -32,4 +33,4 @@ const errorHandler = (err, req, res, next) => {
   });
 };
 
-module.exports = errorHandler;
+export default errorHandler;

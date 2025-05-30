@@ -1,9 +1,10 @@
-const jwt = require('jsonwebtoken');
-const asyncHandler = require('./async');
-const ErrorResponse = require('../utils/errorResponse');
-const User = require('../models/User');
+// ===== src/middleware/auth.js =====
+import jwt from 'jsonwebtoken';
+import asyncHandler from './async.js';
+import ErrorResponse from '../utils/errorResponse.js';
+import User from '../models/User.js';
 
-exports.protect = asyncHandler(async (req, res, next) => {
+export const protect = asyncHandler(async (req, res, next) => {
   let token;
 
   if (
@@ -26,7 +27,7 @@ exports.protect = asyncHandler(async (req, res, next) => {
   }
 });
 
-exports.authorize = (...roles) => {
+export const authorize = (...roles) => {
   return (req, res, next) => {
     if (!roles.includes(req.user.role)) {
       return next(

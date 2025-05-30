@@ -1,5 +1,7 @@
-const mongoose = require('mongoose');
-const slugify = require('slugify');
+
+// ===== src/models/Course.js =====
+import mongoose from 'mongoose';
+import slugify from 'slugify';
 
 const courseSchema = new mongoose.Schema({
   title: {
@@ -79,4 +81,4 @@ courseSchema.pre('save', function(next) {
   next();
 });
 
-module.exports = mongoose.model('Course', courseSchema);
+export default mongoose.model('Course', courseSchema);

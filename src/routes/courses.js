@@ -1,16 +1,16 @@
-const express = require('express');
-const {
+// ===== src/routes/courses.js =====
+import express from 'express';
+import {
   getCourses,
   getCourse,
   createCourse,
   updateCourse,
   deleteCourse,
   joinCourse
-} = require('../controllers/courses');
+} from '../controllers/courses.js';
+import { protect, authorize } from '../middleware/auth.js';
 
 const router = express.Router();
-
-const { protect, authorize } = require('../middleware/auth');
 
 router
   .route('/')
@@ -25,4 +25,4 @@ router
 
 router.post('/:id/join', protect, authorize('student'), joinCourse);
 
-module.exports = router;
+export default router;

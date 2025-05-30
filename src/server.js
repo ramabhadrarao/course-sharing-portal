@@ -1,17 +1,31 @@
-const express = require('express');
-const dotenv = require('dotenv');
-const cors = require('cors');
-const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
-const mongoose = require('mongoose');
-const errorHandler = require('./middleware/error');
-const logger = require('./utils/logger');
+import express from 'express';
+import dotenv from 'dotenv';
+import cors from 'cors';
+import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
+import mongoose from 'mongoose';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+// Import routes
+import authRoutes from './routes/auth.js';
+import userRoutes from './routes/users.js';
+import courseRoutes from './routes/courses.js';
+import quizRoutes from './routes/quizzes.js';
+
+// Import middleware
+import errorHandler from './middleware/error.js';
+import logger from './utils/logger.js';
+
+// Get directory name for ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // Load env vars
 dotenv.config();
 
 // Connect to database
-mongoose.connect(process.env.MONGO_URI)
+mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/college_course_portal')
   .then(() => logger.info('MongoDB Connected'))
   .catch(err => logger.error('MongoDB Connection Error:', err));
 
@@ -21,7 +35,10 @@ const app = express();
 app.use(express.json());
 
 // Enable CORS
-app.use(cors());
+app.use(cors({
+  origin: process.env.CLIENT_URL || 'http://localhost:5173',
+  credentials: true
+}));
 
 // Security headers
 app.use(helmet());
@@ -33,11 +50,23 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
+// Serve static files
+app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
+
 // Mount routers
-app.use('/api/v1/auth', require('./routes/auth'));
-app.use('/api/v1/users', require('./routes/users'));
-app.use('/api/v1/courses', require('./routes/courses'));
-app.use('/api/v1/quizzes', require('./routes/quizzes'));
+app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/users', userRoutes);
+app.use('/api/v1/courses', courseRoutes);
+app.use('/api/v1/courses/:courseId/quizzes', quizRoutes);
+
+// Serve frontend in production
+if (process.env.NODE_ENV === 'production') {
+  app.use(express.static(path.join(__dirname, '../dist')));
+  
+  app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, '../dist/index.html'));
+  });
+}
 
 // Error handler
 app.use(errorHandler);
@@ -45,7 +74,7 @@ app.use(errorHandler);
 const PORT = process.env.PORT || 5000;
 
 const server = app.listen(PORT, () => {
-  logger.info(`Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
+  logger.info(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
 });
 
 // Handle unhandled promise rejections

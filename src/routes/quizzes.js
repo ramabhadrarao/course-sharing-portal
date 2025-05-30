@@ -1,14 +1,14 @@
-const express = require('express');
-const {
+/ ===== src/routes/quizzes.js =====
+import express from 'express';
+import {
   getQuizzes,
   getQuiz,
   createQuiz,
   submitQuizAttempt
-} = require('../controllers/quizzes');
+} from '../controllers/quizzes.js';
+import { protect, authorize } from '../middleware/auth.js';
 
 const router = express.Router({ mergeParams: true });
-
-const { protect, authorize } = require('../middleware/auth');
 
 router
   .route('/')
@@ -18,4 +18,4 @@ router
 router.get('/:id', protect, getQuiz);
 router.post('/:id/attempt', protect, authorize('student'), submitQuizAttempt);
 
-module.exports = router;
+export default router;

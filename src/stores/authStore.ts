@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import axios from 'axios';
-import { jwtDecode } from 'jwt-decode';
 
 interface User {
   id: string;
@@ -9,6 +8,7 @@ interface User {
   name: string;
   role: 'student' | 'faculty' | 'admin';
   profileImageUrl?: string;
+  createdAt: string;
 }
 
 interface AuthState {
@@ -21,6 +21,7 @@ interface AuthState {
   register: (userData: RegisterData) => Promise<void>;
   logout: () => void;
   updateProfile: (userData: Partial<User>) => Promise<void>;
+  getCurrentUser: () => Promise<void>;
 }
 
 interface RegisterData {
@@ -30,141 +31,153 @@ interface RegisterData {
   role: 'student' | 'faculty';
 }
 
-// Mock API functions (replace with actual API calls)
-const mockLogin = async (email: string, password: string) => {
-  // Simulating API call
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  
-  // For demo purposes, create different users based on email
-  if (email.includes('faculty')) {
-    return {
-      token: 'mock-faculty-jwt-token',
-      user: {
-        id: 'faculty-123',
-        email,
-        name: 'Faculty User',
-        role: 'faculty' as const,
-      }
-    };
-  } else if (email.includes('admin')) {
-    return {
-      token: 'mock-admin-jwt-token',
-      user: {
-        id: 'admin-123',
-        email,
-        name: 'Admin User',
-        role: 'admin' as const,
-      }
-    };
-  } else {
-    return {
-      token: 'mock-student-jwt-token',
-      user: {
-        id: 'student-123',
-        email,
-        name: 'Student User',
-        role: 'student' as const,
-      }
-    };
-  }
-};
-
-const mockRegister = async (userData: RegisterData) => {
-  // Simulating API call
-  await new Promise(resolve => setTimeout(resolve, 1000));
-  
-  return {
-    token: 'mock-jwt-token',
-    user: {
-      id: 'user-123',
-      email: userData.email,
-      name: userData.name,
-      role: userData.role,
-    }
-  };
-};
+// Set base URL for API
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
 
 export const useAuthStore = create<AuthState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       token: null,
       user: null,
       isAuthenticated: false,
       isLoading: false,
       error: null,
       
-      login: async (email, password) => {
+      login: async (email: string, password: string) => {
         set({ isLoading: true, error: null });
         try {
-          // Replace with actual API call when available
-          const { token, user } = await mockLogin(email, password);
+          const response = await axios.post(`${API_BASE_URL}/auth/login`, {
+            email,
+            password,
+          });
           
-          // In a real app, you would decode the JWT here
-          // const decodedToken = jwtDecode(token);
+          const { token } = response.data;
+          
+          // Set token in axios defaults
+          axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+          
+          // Fetch user data
+          const userResponse = await axios.get(`${API_BASE_URL}/auth/me`);
+          const user = userResponse.data.data;
           
           set({ 
             token, 
             user, 
             isAuthenticated: true, 
-            isLoading: false 
+            isLoading: false,
+            error: null
           });
-        } catch (error) {
+        } catch (error: any) {
+          const errorMessage = error.response?.data?.error || 'Login failed';
           set({ 
-            error: 'Invalid email or password', 
-            isLoading: false 
+            error: errorMessage, 
+            isLoading: false,
+            token: null,
+            user: null,
+            isAuthenticated: false
           });
+          throw error;
         }
       },
       
-      register: async (userData) => {
+      register: async (userData: RegisterData) => {
         set({ isLoading: true, error: null });
         try {
-          // Replace with actual API call when available
-          const { token, user } = await mockRegister(userData);
+          const response = await axios.post(`${API_BASE_URL}/auth/register`, userData);
+          
+          const { token } = response.data;
+          
+          // Set token in axios defaults
+          axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+          
+          // Fetch user data
+          const userResponse = await axios.get(`${API_BASE_URL}/auth/me`);
+          const user = userResponse.data.data;
           
           set({ 
             token, 
             user, 
             isAuthenticated: true, 
-            isLoading: false 
+            isLoading: false,
+            error: null
           });
-        } catch (error) {
+        } catch (error: any) {
+          const errorMessage = error.response?.data?.error || 'Registration failed';
           set({ 
-            error: 'Registration failed', 
-            isLoading: false 
+            error: errorMessage, 
+            isLoading: false,
+            token: null,
+            user: null,
+            isAuthenticated: false
           });
+          throw error;
         }
       },
       
       logout: () => {
+        // Remove token from axios defaults
+        delete axios.defaults.headers.common['Authorization'];
+        
         set({ 
           token: null, 
           user: null, 
-          isAuthenticated: false 
+          isAuthenticated: false,
+          error: null
         });
       },
       
-      updateProfile: async (userData) => {
+      updateProfile: async (userData: Partial<User>) => {
         set({ isLoading: true, error: null });
         try {
-          // Simulate API call
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          const response = await axios.put(`${API_BASE_URL}/auth/updatedetails`, userData);
+          const updatedUser = response.data.data;
           
           set(state => ({ 
-            user: state.user ? { ...state.user, ...userData } : null,
-            isLoading: false 
+            user: updatedUser,
+            isLoading: false,
+            error: null
           }));
-        } catch (error) {
+        } catch (error: any) {
+          const errorMessage = error.response?.data?.error || 'Failed to update profile';
           set({ 
-            error: 'Failed to update profile', 
+            error: errorMessage, 
             isLoading: false 
           });
+          throw error;
+        }
+      },
+
+      getCurrentUser: async () => {
+        const { token } = get();
+        if (!token) return;
+
+        try {
+          axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+          const response = await axios.get(`${API_BASE_URL}/auth/me`);
+          const user = response.data.data;
+          
+          set({ 
+            user, 
+            isAuthenticated: true,
+            error: null
+          });
+        } catch (error: any) {
+          // Token is invalid, logout
+          get().logout();
         }
       }
     }),
     {
       name: 'auth-storage',
       storage: createJSONStorage(() => localStorage),
+      onRehydrateStorage: () => (state) => {
+        // Restore axios authorization header on app load
+        if (state?.token) {
+          axios.defaults.headers.common['Authorization'] = `Bearer ${state.token}`;
+          // Verify token is still valid
+          state.getCurrentUser();
+        }
+      },
     }
   )
 );
