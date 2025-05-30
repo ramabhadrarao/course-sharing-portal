@@ -1,0 +1,4 @@
+🔐 Login Credentials:
+Admin: admin@example.com / password
+Faculty: faculty@example.com / password
+Student: student@example.com / password

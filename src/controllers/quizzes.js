@@ -1,12 +1,13 @@
-const Quiz = require('../models/Quiz');
-const QuizAttempt = require('../models/QuizAttempt');
-const ErrorResponse = require('../utils/errorResponse');
-const asyncHandler = require('../middleware/async');
+// src/controllers/quizzes.js
+import Quiz from '../models/Quiz.js';
+import QuizAttempt from '../models/QuizAttempt.js';
+import ErrorResponse from '../utils/errorResponse.js';
+import asyncHandler from '../middleware/async.js';
 
 // @desc    Get all quizzes for a course
 // @route   GET /api/v1/courses/:courseId/quizzes
 // @access  Private
-exports.getQuizzes = asyncHandler(async (req, res, next) => {
+export const getQuizzes = asyncHandler(async (req, res, next) => {
   const quizzes = await Quiz.find({ course: req.params.courseId });
 
   res.status(200).json({
@@ -19,7 +20,7 @@ exports.getQuizzes = asyncHandler(async (req, res, next) => {
 // @desc    Get single quiz
 // @route   GET /api/v1/quizzes/:id
 // @access  Private
-exports.getQuiz = asyncHandler(async (req, res, next) => {
+export const getQuiz = asyncHandler(async (req, res, next) => {
   const quiz = await Quiz.findById(req.params.id).populate('course');
 
   if (!quiz) {
@@ -35,7 +36,7 @@ exports.getQuiz = asyncHandler(async (req, res, next) => {
 // @desc    Create quiz
 // @route   POST /api/v1/courses/:courseId/quizzes
 // @access  Private (Faculty/Admin)
-exports.createQuiz = asyncHandler(async (req, res, next) => {
+export const createQuiz = asyncHandler(async (req, res, next) => {
   req.body.course = req.params.courseId;
 
   const quiz = await Quiz.create(req.body);
@@ -49,7 +50,7 @@ exports.createQuiz = asyncHandler(async (req, res, next) => {
 // @desc    Submit quiz attempt
 // @route   POST /api/v1/quizzes/:id/attempt
 // @access  Private (Student)
-exports.submitQuizAttempt = asyncHandler(async (req, res, next) => {
+export const submitQuizAttempt = asyncHandler(async (req, res, next) => {
   const quiz = await Quiz.findById(req.params.id);
 
   if (!quiz) {

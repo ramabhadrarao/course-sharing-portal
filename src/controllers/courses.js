@@ -1,11 +1,12 @@
-const Course = require('../models/Course');
-const ErrorResponse = require('../utils/errorResponse');
-const asyncHandler = require('../middleware/async');
+// src/controllers/courses.js
+import Course from '../models/Course.js';
+import ErrorResponse from '../utils/errorResponse.js';
+import asyncHandler from '../middleware/async.js';
 
 // @desc    Get all courses
 // @route   GET /api/v1/courses
 // @access  Public
-exports.getCourses = asyncHandler(async (req, res, next) => {
+export const getCourses = asyncHandler(async (req, res, next) => {
   const courses = await Course.find().populate('createdBy', 'name email');
   
   res.status(200).json({
@@ -18,7 +19,7 @@ exports.getCourses = asyncHandler(async (req, res, next) => {
 // @desc    Get single course
 // @route   GET /api/v1/courses/:id
 // @access  Public
-exports.getCourse = asyncHandler(async (req, res, next) => {
+export const getCourse = asyncHandler(async (req, res, next) => {
   const course = await Course.findById(req.params.id).populate('createdBy', 'name email');
 
   if (!course) {
@@ -34,7 +35,7 @@ exports.getCourse = asyncHandler(async (req, res, next) => {
 // @desc    Create new course
 // @route   POST /api/v1/courses
 // @access  Private (Faculty/Admin)
-exports.createCourse = asyncHandler(async (req, res, next) => {
+export const createCourse = asyncHandler(async (req, res, next) => {
   req.body.createdBy = req.user.id;
 
   const course = await Course.create(req.body);
@@ -48,7 +49,7 @@ exports.createCourse = asyncHandler(async (req, res, next) => {
 // @desc    Update course
 // @route   PUT /api/v1/courses/:id
 // @access  Private (Faculty/Admin)
-exports.updateCourse = asyncHandler(async (req, res, next) => {
+export const updateCourse = asyncHandler(async (req, res, next) => {
   let course = await Course.findById(req.params.id);
 
   if (!course) {
@@ -74,7 +75,7 @@ exports.updateCourse = asyncHandler(async (req, res, next) => {
 // @desc    Delete course
 // @route   DELETE /api/v1/courses/:id
 // @access  Private (Faculty/Admin)
-exports.deleteCourse = asyncHandler(async (req, res, next) => {
+export const deleteCourse = asyncHandler(async (req, res, next) => {
   const course = await Course.findById(req.params.id);
 
   if (!course) {
@@ -86,7 +87,7 @@ exports.deleteCourse = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse(`User ${req.user.id} is not authorized to delete this course`, 401));
   }
 
-  await course.remove();
+  await course.deleteOne();
 
   res.status(200).json({
     success: true,
@@ -97,7 +98,7 @@ exports.deleteCourse = asyncHandler(async (req, res, next) => {
 // @desc    Join course
 // @route   POST /api/v1/courses/:id/join
 // @access  Private (Student)
-exports.joinCourse = asyncHandler(async (req, res, next) => {
+export const joinCourse = asyncHandler(async (req, res, next) => {
   const course = await Course.findOne({ 
     _id: req.params.id,
     accessCode: req.body.accessCode

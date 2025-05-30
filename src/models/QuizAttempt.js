@@ -1,4 +1,5 @@
-const mongoose = require('mongoose');
+// src/models/QuizAttempt.js
+import mongoose from 'mongoose';
 
 const quizAttemptSchema = new mongoose.Schema({
   quiz: {
@@ -34,4 +35,4 @@ const quizAttemptSchema = new mongoose.Schema({
   }
 });
 
-module.exports = mongoose.model('QuizAttempt', quizAttemptSchema);
+export default mongoose.model('QuizAttempt', quizAttemptSchema);

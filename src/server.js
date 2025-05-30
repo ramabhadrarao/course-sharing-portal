@@ -34,14 +34,33 @@ const app = express();
 // Body parser
 app.use(express.json());
 
-// Enable CORS
+// Enable CORS with proper configuration
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
-  credentials: true
+  origin: [
+    'http://localhost:5173', // Vite dev server
+    'http://localhost:3000', // Alternative React dev server
+    'http://localhost:4173', // Vite preview
+    process.env.CLIENT_URL
+  ].filter(Boolean), // Remove any undefined values
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
 // Security headers
-app.use(helmet());
+app.use(helmet({
+  crossOriginEmbedderPolicy: false, // Allow embedding videos
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+      fontSrc: ["'self'", "https://fonts.gstatic.com"],
+      imgSrc: ["'self'", "data:", "https:", "http:"],
+      frameSrc: ["'self'", "https://www.youtube.com", "https://youtube.com"],
+      connectSrc: ["'self'", "http://localhost:*", "ws://localhost:*"]
+    }
+  }
+}));
 
 // Rate limiting
 const limiter = rateLimit({
@@ -59,6 +78,15 @@ app.use('/api/v1/users', userRoutes);
 app.use('/api/v1/courses', courseRoutes);
 app.use('/api/v1/courses/:courseId/quizzes', quizRoutes);
 
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'Server is running',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Serve frontend in production
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../dist')));
@@ -75,6 +103,12 @@ const PORT = process.env.PORT || 5000;
 
 const server = app.listen(PORT, () => {
   logger.info(`Server running in ${process.env.NODE_ENV || 'development'} mode on port ${PORT}`);
+  logger.info(`CORS enabled for: ${JSON.stringify([
+    'http://localhost:5173',
+    'http://localhost:3000', 
+    'http://localhost:4173',
+    process.env.CLIENT_URL
+  ].filter(Boolean))}`);
 });
 
 // Handle unhandled promise rejections

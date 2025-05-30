@@ -1,4 +1,4 @@
-/ ===== src/routes/quizzes.js =====
+// ===== src/routes/quizzes.js =====
 import express from 'express';
 import {
   getQuizzes,

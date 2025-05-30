@@ -14,7 +14,9 @@
     "start": "npm run server:start",
     "build": "npm run client:build",
     "lint": "eslint . --ext ts,tsx,js --report-unused-disable-directives --max-warnings 0",
-    "test": "jest"
+    "test": "jest",
+    "seed": "node src/seeder.js -i",
+    "seed:destroy": "node src/seeder.js -d"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.3.2",
