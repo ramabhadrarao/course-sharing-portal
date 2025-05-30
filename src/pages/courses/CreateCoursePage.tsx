@@ -44,6 +44,9 @@ const CreateCoursePage: React.FC = () => {
   const [createError, setCreateError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   
+  // Get API base URL for file uploads
+  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+  
   const categories = [
     'Computer Science', 'Mathematics', 'Physics', 'Chemistry', 'Biology',
     'Engineering', 'Business', 'Arts', 'Language', 'Other'
@@ -107,6 +110,26 @@ const CreateCoursePage: React.FC = () => {
     setIsSubmitting(true);
     
     try {
+      // Validate required fields
+      if (!data.title.trim()) {
+        throw new Error('Course title is required');
+      }
+      if (!data.description.trim()) {
+        throw new Error('Course description is required');
+      }
+      if (!data.accessCode.trim()) {
+        throw new Error('Access code is required');
+      }
+      if (!data.category) {
+        throw new Error('Category is required');
+      }
+      if (!data.difficulty) {
+        throw new Error('Difficulty level is required');
+      }
+      if (!data.learningOutcomes || data.learningOutcomes.filter(o => o.trim()).length === 0) {
+        throw new Error('At least one learning outcome is required');
+      }
+
       const courseData = {
         title: data.title.trim(),
         description: data.description.trim(),
@@ -145,11 +168,15 @@ const CreateCoursePage: React.FC = () => {
     'https://images.pexels.com/photos/270348/pexels-photo-270348.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2',
   ];
   
-  // Handle file upload for cover image
+  // Handle file upload for cover image - Fixed URL handling
   const handleFileUpload = (fileUrl: string, metadata?: any) => {
     console.log('File uploaded:', fileUrl, metadata);
-    setValue('coverImage', fileUrl, { shouldValidate: true });
-    setCoverImagePreview(fileUrl);
+    
+    // Convert relative URL to absolute URL
+    const absoluteUrl = fileUrl.startsWith('http') ? fileUrl : `${API_BASE_URL}${fileUrl}`;
+    
+    setValue('coverImage', absoluteUrl, { shouldValidate: true });
+    setCoverImagePreview(absoluteUrl);
   };
   
   // Set image preview from URL

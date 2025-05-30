@@ -233,6 +233,38 @@ export const getCourse = asyncHandler(async (req, res, next) => {
 export const createCourse = asyncHandler(async (req, res, next) => {
   req.body.createdBy = req.user.id;
 
+  // Validate required fields
+  const { title, description, accessCode, category, difficulty } = req.body;
+  
+  if (!title || !title.trim()) {
+    return next(new ErrorResponse('Course title is required', 400));
+  }
+  
+  if (!description || !description.trim()) {
+    return next(new ErrorResponse('Course description is required', 400));
+  }
+  
+  if (!accessCode || !accessCode.trim()) {
+    return next(new ErrorResponse('Access code is required', 400));
+  }
+  
+  if (!category) {
+    return next(new ErrorResponse('Course category is required', 400));
+  }
+  
+  if (!difficulty) {
+    return next(new ErrorResponse('Course difficulty is required', 400));
+  }
+
+  // Check if access code already exists
+  const existingCourse = await Course.findOne({ 
+    accessCode: accessCode.toUpperCase().trim()
+  });
+  
+  if (existingCourse) {
+    return next(new ErrorResponse('Access code already exists. Please choose a different one.', 400));
+  }
+
   // Generate slug if not provided
   if (!req.body.slug && req.body.title) {
     req.body.slug = req.body.title.toLowerCase()
@@ -240,15 +272,42 @@ export const createCourse = asyncHandler(async (req, res, next) => {
       .replace(/\s+/g, '-');
   }
 
-  const course = await Course.create(req.body);
-  
-  // Populate the createdBy field before sending response
-  await course.populate('createdBy', 'name email');
+  // Ensure access code is uppercase
+  req.body.accessCode = accessCode.toUpperCase().trim();
 
-  res.status(201).json({
-    success: true,
-    data: course
-  });
+  // Initialize empty sections array
+  req.body.sections = [];
+
+  console.log('Creating course with data:', req.body);
+
+  try {
+    const course = await Course.create(req.body);
+    
+    // Populate the createdBy field before sending response
+    await course.populate('createdBy', 'name email');
+
+    res.status(201).json({
+      success: true,
+      data: course
+    });
+  } catch (error) {
+    console.error('Course creation error:', error);
+    
+    // Handle validation errors
+    if (error.name === 'ValidationError') {
+      const message = Object.values(error.errors).map(val => val.message).join(', ');
+      return next(new ErrorResponse(message, 400));
+    }
+    
+    // Handle duplicate key error
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyValue)[0];
+      const message = `${field} already exists`;
+      return next(new ErrorResponse(message, 400));
+    }
+    
+    return next(new ErrorResponse('Failed to create course', 500));
+  }
 });
 
 // @desc    Update course
@@ -264,6 +323,20 @@ export const updateCourse = asyncHandler(async (req, res, next) => {
   // Make sure user is course owner or admin
   if (course.createdBy.toString() !== req.user.id && req.user.role !== 'admin') {
     return next(new ErrorResponse(`User ${req.user.id} is not authorized to update this course`, 401));
+  }
+
+  // Check if access code is being changed and already exists
+  if (req.body.accessCode && req.body.accessCode !== course.accessCode) {
+    const existingCourse = await Course.findOne({ 
+      accessCode: req.body.accessCode.toUpperCase().trim(),
+      _id: { $ne: req.params.id }
+    });
+    
+    if (existingCourse) {
+      return next(new ErrorResponse('Access code already exists. Please choose a different one.', 400));
+    }
+    
+    req.body.accessCode = req.body.accessCode.toUpperCase().trim();
   }
 
   // Update slug if title changed

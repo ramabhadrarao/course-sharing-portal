@@ -31,7 +31,7 @@ const FileUpload: React.FC<FileUploadProps> = ({
   const [urlMode, setUrlMode] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
+  const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
@@ -102,15 +102,18 @@ const FileUpload: React.FC<FileUploadProps> = ({
       const formData = new FormData();
       formData.append('file', file);
 
-      const response = await axios.post(`${API_BASE_URL}/courses/upload`, formData, {
+      const response = await axios.post(`${API_BASE_URL}/api/v1/courses/upload`, formData, {
         headers: {
           'Content-Type': 'multipart/form-data',
+          'Authorization': axios.defaults.headers.common['Authorization'] || ''
         },
         onUploadProgress: (progressEvent) => {
           const progress = Math.round((progressEvent.loaded * 100) / (progressEvent.total || 1));
           setUploadProgress(progress);
         },
       });
+
+      console.log('Upload response:', response.data);
 
       const uploadedFile = {
         ...response.data.data,
@@ -119,7 +122,13 @@ const FileUpload: React.FC<FileUploadProps> = ({
       };
 
       setUploadedFiles(prev => [...prev, uploadedFile]);
-      onFileUpload(uploadedFile.fileUrl, uploadedFile);
+      
+      // Return the absolute URL for the uploaded file
+      const absoluteFileUrl = uploadedFile.fileUrl.startsWith('http') 
+        ? uploadedFile.fileUrl 
+        : `${API_BASE_URL}${uploadedFile.fileUrl}`;
+      
+      onFileUpload(absoluteFileUrl, uploadedFile);
       
       setUploading(false);
       setUploadProgress(0);
