@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { PlusCircle, BookOpen, Users, Award, Calendar, Clock, TrendingUp } from 'lucide-react';
+import { PlusCircle, BookOpen, Users, Award, Calendar, Clock, TrendingUp, Shield, Eye } from 'lucide-react';
 
 import Button from '../../components/ui/Button';
 import { Card, CardContent, CardHeader } from '../../components/ui/Card';
@@ -17,31 +17,113 @@ const DashboardPage: React.FC = () => {
   }, [fetchCourses]);
   
   const isFaculty = user?.role === 'faculty' || user?.role === 'admin';
+  const isAdmin = user?.role === 'admin';
   
-  // Filter courses based on user role
-  const userCourses = courses.filter(course => {
-    if (isFaculty) {
-      // Faculty/Admin see courses they created
-      return course.createdBy.id === user?.id || course.createdBy._id === user?.id;
+  // Helper function to check if user is owner of a course
+  const isOwner = (course: any) => {
+    return course.createdBy.id === user?.id || course.createdBy._id === user?.id;
+  };
+  
+  // Helper function to check if student is enrolled in a course
+  const isEnrolled = (course: any) => {
+    return course.enrolledStudents && course.enrolledStudents.includes(user?.id || user?._id || '');
+  };
+  
+  // Get courses based on user role - FIXED LOGIC
+  const getDashboardCourses = () => {
+    if (isAdmin) {
+      // Admin sees ALL courses
+      return {
+        displayCourses: courses, // All courses for dashboard display
+        ownedCourses: courses.filter(course => isOwner(course)),
+        enrolledCourses: courses.filter(course => isEnrolled(course) && !isOwner(course)),
+        accessibleCourses: courses // Admin can access all content
+      };
+    } else if (isFaculty) {
+      // Faculty sees all courses but with different access levels
+      return {
+        displayCourses: courses, // All courses for dashboard display
+        ownedCourses: courses.filter(course => isOwner(course)),
+        enrolledCourses: courses.filter(course => isEnrolled(course) && !isOwner(course)),
+        accessibleCourses: courses // Faculty can access all content
+      };
     } else {
-      // Students see courses they're enrolled in
-      return course.enrolledStudents && course.enrolledStudents.includes(user?.id || user?._id || '');
+      // Students see all courses but can only access enrolled ones
+      return {
+        displayCourses: courses, // All courses for discovery
+        ownedCourses: [], // Students don't own courses
+        enrolledCourses: courses.filter(course => isEnrolled(course)),
+        accessibleCourses: courses.filter(course => isEnrolled(course)) // Only enrolled for content access
+      };
     }
-  });
+  };
   
-  // Get recent courses (last 3)
-  const recentCourses = [...userCourses]
-    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-    .slice(0, 3);
-
-  // Calculate stats based on user role
-  const getStatsForRole = () => {
+  const courseData = getDashboardCourses();
+  
+  // Get recent courses for dashboard display based on user interaction
+  const getRecentCourses = () => {
     if (isFaculty) {
-      const totalStudents = userCourses.reduce((total, course) => total + course.enrolledStudentsCount, 0);
+      // For faculty/admin, prioritize owned courses, then enrolled, then recently updated
+      const ownedCourses = courseData.ownedCourses || [];
+      const enrolledCourses = courseData.enrolledCourses || [];
+      const otherCourses = (courseData.displayCourses || []).filter(course => 
+        !isOwner(course) && !isEnrolled(course)
+      );
+      
+      // Combine and get most recent
+      const prioritizedCourses = [
+        ...ownedCourses.map(course => ({ ...course, priority: 1 })),
+        ...enrolledCourses.map(course => ({ ...course, priority: 2 })),
+        ...otherCourses.map(course => ({ ...course, priority: 3 }))
+      ];
+      
+      return prioritizedCourses
+        .sort((a, b) => {
+          // First sort by priority, then by update date
+          if (a.priority !== b.priority) {
+            return a.priority - b.priority;
+          }
+          return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+        })
+        .slice(0, 3);
+    } else {
+      // For students, prioritize enrolled courses, then show other available courses
+      const enrolledCourses = courseData.enrolledCourses || [];
+      const availableCourses = (courseData.displayCourses || []).filter(course => 
+        !isEnrolled(course)
+      );
+      
+      const prioritizedCourses = [
+        ...enrolledCourses.map(course => ({ ...course, priority: 1 })),
+        ...availableCourses.map(course => ({ ...course, priority: 2 }))
+      ];
+      
+      return prioritizedCourses
+        .sort((a, b) => {
+          if (a.priority !== b.priority) {
+            return a.priority - b.priority;
+          }
+          return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+        })
+        .slice(0, 3);
+    }
+  };
+  
+  const recentCourses = getRecentCourses();
+
+  // Calculate stats based on user role - FIXED CALCULATIONS
+  const getStatsForRole = () => {
+    if (isAdmin) {
+      // Admin sees system-wide statistics
+      const totalStudents = (courseData.displayCourses || []).reduce((total, course) => 
+        total + (course.enrolledStudentsCount || 0), 0
+      );
+      const activeCourses = (courseData.displayCourses || []).filter(c => c.isActive).length;
+      
       return {
         primaryStat: {
-          label: 'Courses Created',
-          value: userCourses.length,
+          label: 'Total Courses',
+          value: courseData.displayCourses?.length || 0,
           icon: BookOpen,
           color: 'from-primary-500 to-primary-700'
         },
@@ -53,29 +135,64 @@ const DashboardPage: React.FC = () => {
         },
         tertiaryStat: {
           label: 'Active Courses',
-          value: userCourses.filter(c => c.isActive).length,
+          value: activeCourses,
           icon: TrendingUp,
           color: 'from-accent-500 to-accent-700'
         }
       };
-    } else {
+    } else if (isFaculty) {
+      // Faculty sees their own + accessible courses
+      const ownedCount = courseData.ownedCourses?.length || 0;
+      const totalStudents = (courseData.ownedCourses || []).reduce((total, course) => 
+        total + (course.enrolledStudentsCount || 0), 0
+      );
+      const accessibleCount = courseData.accessibleCourses?.length || 0;
+      
       return {
         primaryStat: {
-          label: 'Enrolled Courses',
-          value: userCourses.length,
+          label: 'Courses Created',
+          value: ownedCount,
           icon: BookOpen,
           color: 'from-primary-500 to-primary-700'
         },
         secondaryStat: {
-          label: 'Learning Hours',
-          value: userCourses.reduce((total, course) => total + course.estimatedDuration, 0) + 'h',
-          icon: Clock,
+          label: 'Your Students',
+          value: totalStudents,
+          icon: Users,
           color: 'from-secondary-500 to-secondary-700'
         },
         tertiaryStat: {
-          label: 'Completed',
-          value: '0', // You can track completion status
-          icon: Award,
+          label: 'Accessible Courses',
+          value: accessibleCount,
+          icon: Eye,
+          color: 'from-accent-500 to-accent-700'
+        }
+      };
+    } else {
+      // Student statistics
+      const enrolledCount = courseData.enrolledCourses?.length || 0;
+      const totalAvailable = courseData.displayCourses?.length || 0;
+      const learningHours = (courseData.enrolledCourses || []).reduce((total, course) => 
+        total + (course.estimatedDuration || 0), 0
+      );
+      
+      return {
+        primaryStat: {
+          label: 'Enrolled Courses',
+          value: enrolledCount,
+          icon: BookOpen,
+          color: 'from-primary-500 to-primary-700'
+        },
+        secondaryStat: {
+          label: 'Available Courses',
+          value: totalAvailable,
+          icon: Eye,
+          color: 'from-secondary-500 to-secondary-700'
+        },
+        tertiaryStat: {
+          label: 'Learning Hours',
+          value: learningHours + 'h',
+          icon: Clock,
           color: 'from-accent-500 to-accent-700'
         }
       };
@@ -99,10 +216,16 @@ const DashboardPage: React.FC = () => {
               day: 'numeric' 
             })}
           </p>
-          <div className="mt-2">
+          <div className="mt-2 flex items-center space-x-2">
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800 capitalize">
               {user?.role}
             </span>
+            {isAdmin && (
+              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                <Shield className="h-3 w-3 mr-1" />
+                System Administrator
+              </span>
+            )}
           </div>
         </div>
         
@@ -166,11 +289,11 @@ const DashboardPage: React.FC = () => {
         </Card>
       </div>
       
-      {/* Recent Courses */}
+      {/* Recent/Priority Courses */}
       <div className="mb-8">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-semibold text-gray-900">
-            {isFaculty ? 'Your Recent Courses' : 'Continue Learning'}
+            {isFaculty ? 'Your Priority Courses' : 'Your Learning Dashboard'}
           </h2>
           <Link to="/courses" className="text-primary-600 hover:text-primary-700 text-sm font-medium">
             View all courses
@@ -183,67 +306,93 @@ const DashboardPage: React.FC = () => {
           </div>
         ) : recentCourses.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {recentCourses.map((course) => (
-              <Card 
-                key={course.id} 
-                as={Link} 
-                to={`/courses/${course.id}`}
-                hover
-                className="transition-all duration-200 animate-fade-in"
-              >
-                {course.coverImage && (
-                  <div className="aspect-video w-full overflow-hidden">
-                    <img 
-                      src={course.coverImage} 
-                      alt={course.title} 
-                      className="w-full h-full object-cover"
-                    />
-                  </div>
-                )}
-                <CardContent className="p-4">
-                  <h3 className="font-semibold text-lg mb-2 text-gray-900 line-clamp-2">
-                    {course.title}
-                  </h3>
-                  <p className="text-gray-500 text-sm mb-3 line-clamp-2">
-                    {course.shortDescription || course.description}
-                  </p>
-                  
-                  <div className="flex items-center justify-between text-xs text-gray-500 mb-3">
-                    <div className="flex items-center space-x-3">
-                      <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded">
-                        {course.category}
-                      </span>
-                      <span className="bg-secondary-100 text-secondary-700 px-2 py-1 rounded">
-                        {course.difficulty}
-                      </span>
+            {recentCourses.map((course) => {
+              const userIsOwner = isOwner(course);
+              const userIsEnrolled = isEnrolled(course);
+              const canAccessContent = isFaculty || userIsEnrolled;
+              
+              return (
+                <Card 
+                  key={course.id || course._id} 
+                  as={Link} 
+                  to={`/courses/${course.id || course._id}`}
+                  hover
+                  className="transition-all duration-200 animate-fade-in"
+                >
+                  {course.coverImage && (
+                    <div className="aspect-video w-full overflow-hidden">
+                      <img 
+                        src={course.coverImage} 
+                        alt={course.title} 
+                        className="w-full h-full object-cover"
+                      />
                     </div>
-                  </div>
-                  
-                  <div className="flex items-center justify-between text-xs text-gray-500">
-                    <div className="flex items-center">
-                      <Users className="h-3 w-3 mr-1" />
-                      {course.enrolledStudentsCount} students
+                  )}
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between mb-2">
+                      <h3 className="font-semibold text-lg text-gray-900 line-clamp-2 flex-1">
+                        {course.title}
+                      </h3>
+                      <div className="flex flex-col space-y-1 ml-2">
+                        {userIsOwner && (
+                          <span className="text-xs px-2 py-1 rounded-full bg-primary-100 text-primary-700 font-medium">
+                            Owner
+                          </span>
+                        )}
+                        {!userIsOwner && canAccessContent && (
+                          <span className="text-xs px-2 py-1 rounded-full bg-success-100 text-success-700 font-medium">
+                            {isFaculty ? 'Access' : 'Enrolled'}
+                          </span>
+                        )}
+                        {!canAccessContent && (
+                          <span className="text-xs px-2 py-1 rounded-full bg-amber-100 text-amber-700 font-medium">
+                            Join Required
+                          </span>
+                        )}
+                      </div>
                     </div>
-                    <div className="flex items-center">
-                      <Calendar className="h-3 w-3 mr-1" />
-                      {formatDate(course.updatedAt)}
-                    </div>
-                  </div>
-                  
-                  {/* Show access code only to faculty/admin and only for their own courses */}
-                  {isFaculty && (course.createdBy.id === user?.id || course.createdBy._id === user?.id) && (
-                    <div className="mt-3 pt-3 border-t border-gray-200">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-medium text-gray-700">Access Code:</span>
-                        <span className="text-xs font-mono bg-primary-100 text-primary-800 px-2 py-1 rounded">
-                          {course.accessCode}
+                    
+                    <p className="text-gray-500 text-sm mb-3 line-clamp-2">
+                      {course.shortDescription || course.description}
+                    </p>
+                    
+                    <div className="flex items-center justify-between text-xs text-gray-500 mb-3">
+                      <div className="flex items-center space-x-3">
+                        <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded">
+                          {course.category}
+                        </span>
+                        <span className="bg-secondary-100 text-secondary-700 px-2 py-1 rounded">
+                          {course.difficulty}
                         </span>
                       </div>
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
+                    
+                    <div className="flex items-center justify-between text-xs text-gray-500">
+                      <div className="flex items-center">
+                        <Users className="h-3 w-3 mr-1" />
+                        {course.enrolledStudentsCount || 0} students
+                      </div>
+                      <div className="flex items-center">
+                        <Calendar className="h-3 w-3 mr-1" />
+                        {formatDate(course.updatedAt)}
+                      </div>
+                    </div>
+                    
+                    {/* Show access code only to course owners */}
+                    {userIsOwner && (
+                      <div className="mt-3 pt-3 border-t border-gray-200">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-medium text-gray-700">Access Code:</span>
+                          <span className="text-xs font-mono bg-primary-100 text-primary-800 px-2 py-1 rounded">
+                            {course.accessCode}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              );
+            })}
           </div>
         ) : (
           <Card>
@@ -284,7 +433,7 @@ const DashboardPage: React.FC = () => {
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Recent Activity</h2>
         <Card>
           <CardContent className="divide-y divide-gray-200">
-            {userCourses.length > 0 ? (
+            {(courseData.displayCourses?.length || 0) > 0 ? (
               <>
                 <div className="py-4 first:pt-0 last:pb-0">
                   <div className="flex items-start">
@@ -297,8 +446,10 @@ const DashboardPage: React.FC = () => {
                       </p>
                       <p className="text-sm text-gray-500 mt-1">
                         {isFaculty 
-                          ? `Managing ${userCourses.length} course${userCourses.length !== 1 ? 's' : ''}`
-                          : `Enrolled in ${userCourses.length} course${userCourses.length !== 1 ? 's' : ''}`
+                          ? isAdmin 
+                            ? `System has ${courseData.displayCourses?.length || 0} total courses`
+                            : `Created ${courseData.ownedCourses?.length || 0} courses, accessing ${courseData.accessibleCourses?.length || 0} total`
+                          : `Enrolled in ${courseData.enrolledCourses?.length || 0} of ${courseData.displayCourses?.length || 0} available courses`
                         }
                       </p>
                       <p className="text-xs text-gray-400 mt-1">Today</p>
@@ -314,7 +465,7 @@ const DashboardPage: React.FC = () => {
                       </div>
                       <div className="ml-3">
                         <p className="text-sm font-medium text-gray-900">
-                          {isFaculty ? "Course updated" : "Course accessed"}
+                          {isFaculty ? "Recent course activity" : "Continue learning"}
                         </p>
                         <p className="text-sm text-gray-500 mt-1">
                           {recentCourses[0].title}
