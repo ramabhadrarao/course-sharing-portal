@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Search, PlusCircle, BookmarkPlus, Edit, Trash, Eye, Users, Calendar, Filter, Grid, List } from 'lucide-react';
+import { Search, PlusCircle, BookmarkPlus, Edit, Trash, Eye, Users, Calendar, Filter, Grid, List, AlertCircle } from 'lucide-react';
 
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
@@ -45,7 +45,7 @@ const CoursesPage: React.FC = () => {
     });
   }, [fetchCourses, searchTerm, selectedCategory, selectedDifficulty]);
   
-  // Filter courses locally for immediate feedback
+  // Filter courses based on user role and enrollment status
   const filteredCourses = courses.filter(course => {
     const matchesSearch = searchTerm === '' || 
       course.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -55,7 +55,16 @@ const CoursesPage: React.FC = () => {
     const matchesCategory = selectedCategory === 'all' || course.category === selectedCategory;
     const matchesDifficulty = selectedDifficulty === 'all' || course.difficulty === selectedDifficulty;
     
-    return matchesSearch && matchesCategory && matchesDifficulty;
+    // Role-based filtering
+    if (isFaculty) {
+      // Faculty/Admin see all courses they created
+      const isOwner = course.createdBy.id === user?.id || course.createdBy._id === user?.id;
+      return matchesSearch && matchesCategory && matchesDifficulty && isOwner;
+    } else {
+      // Students see courses they're enrolled in + available courses for joining
+      // For this view, we'll show all active courses but indicate enrollment status
+      return matchesSearch && matchesCategory && matchesDifficulty && course.isActive;
+    }
   });
   
   const handleJoinCourse = async (e: React.FormEvent) => {
@@ -68,8 +77,10 @@ const CoursesPage: React.FC = () => {
     try {
       await joinCourse(accessCode.trim());
       setAccessCode('');
+      // Refresh the courses to show updated enrollment status
+      fetchCourses();
     } catch (error) {
-      setJoinError('Invalid access code. Please try again.');
+      setJoinError('Invalid access code. Please check with your instructor.');
     } finally {
       setIsJoining(false);
     }
@@ -101,17 +112,25 @@ const CoursesPage: React.FC = () => {
     setSelectedDifficulty('all');
     setSearchTerm('');
   };
+
+  // Check if student is enrolled in a course
+  const isEnrolledInCourse = (course: Course) => {
+    if (isFaculty) return true; // Faculty always have access
+    return course.enrolledStudents && course.enrolledStudents.includes(user?.id || user?._id || '');
+  };
   
   return (
     <div className="animate-fade-in">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">All Courses</h1>
+          <h1 className="text-2xl font-bold text-gray-900">
+            {isFaculty ? 'My Courses' : 'Available Courses'}
+          </h1>
           <p className="text-gray-600 mt-1">
             {isFaculty 
               ? 'Manage and create your courses'
-              : 'Browse and join available courses'}
+              : 'Join courses using access codes from your instructors'}
           </p>
         </div>
         
@@ -145,9 +164,9 @@ const CoursesPage: React.FC = () => {
         </div>
       </div>
       
-      {/* Search and Filters */}
+      {/* Search and Join Section */}
       <div className="bg-white p-4 rounded-lg border border-gray-200 mb-6">
-        <div className="flex flex-col md:flex-row gap-4">
+        <div className="flex flex-col gap-4">
           {/* Search */}
           <div className="flex-1">
             <Input
@@ -161,35 +180,47 @@ const CoursesPage: React.FC = () => {
           
           {/* Join Course (for students) */}
           {!isFaculty && (
-            <div className="md:w-80">
-              <form onSubmit={handleJoinCourse} className="flex">
-                <Input
-                  placeholder="Enter course access code"
-                  value={accessCode}
-                  onChange={(e) => setAccessCode(e.target.value.toUpperCase())}
-                  error={joinError || undefined}
-                  className="rounded-r-none"
-                />
+            <div className="border-t border-gray-200 pt-4">
+              <h3 className="text-sm font-medium text-gray-700 mb-2">Join a New Course</h3>
+              <form onSubmit={handleJoinCourse} className="flex flex-col sm:flex-row gap-2">
+                <div className="flex-1">
+                  <Input
+                    placeholder="Enter course access code (e.g., CS101A)"
+                    value={accessCode}
+                    onChange={(e) => setAccessCode(e.target.value.toUpperCase())}
+                    error={joinError || undefined}
+                    fullWidth
+                  />
+                </div>
                 <Button
                   type="submit"
-                  className="rounded-l-none"
                   isLoading={isJoining}
                   icon={<BookmarkPlus className="h-5 w-5" />}
+                  className="sm:w-auto w-full"
                 >
-                  Join
+                  Join Course
                 </Button>
               </form>
+              <p className="text-xs text-gray-500 mt-2">
+                Get the access code from your instructor to join their course.
+              </p>
             </div>
           )}
           
           {/* Filter Toggle */}
-          <Button
-            variant="outline"
-            onClick={() => setShowFilters(!showFilters)}
-            icon={<Filter className="h-5 w-5" />}
-          >
-            Filters
-          </Button>
+          <div className="flex items-center justify-between border-t border-gray-200 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => setShowFilters(!showFilters)}
+              icon={<Filter className="h-5 w-5" />}
+            >
+              Filters
+            </Button>
+            
+            <div className="text-sm text-gray-600">
+              {filteredCourses.length} course{filteredCourses.length !== 1 ? 's' : ''} found
+            </div>
+          </div>
         </div>
         
         {/* Filters Panel */}
@@ -240,16 +271,12 @@ const CoursesPage: React.FC = () => {
             </div>
           </div>
         )}
-        
-        {/* Results Count */}
-        <div className="mt-4 text-sm text-gray-600">
-          {filteredCourses.length} course{filteredCourses.length !== 1 ? 's' : ''} found
-        </div>
       </div>
       
       {/* Error Display */}
       {error && (
-        <div className="bg-error-50 text-error-700 p-3 rounded-md mb-4">
+        <div className="bg-error-50 text-error-700 p-3 rounded-md mb-4 flex items-center">
+          <AlertCircle className="h-5 w-5 mr-2" />
           {error}
         </div>
       )}
@@ -270,7 +297,8 @@ const CoursesPage: React.FC = () => {
               key={course.id} 
               course={course} 
               isFaculty={isFaculty}
-              currentUserId={user?.id}
+              currentUserId={user?.id || user?._id}
+              isEnrolled={isEnrolledInCourse(course)}
               onDelete={(courseId) => setShowDeleteConfirm({ id: courseId, title: course.title })}
               onManage={handleManageCourse}
               onView={handleViewCourse}
@@ -281,13 +309,15 @@ const CoursesPage: React.FC = () => {
       ) : (
         <Card>
           <CardContent className="text-center py-12">
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No courses found</h3>
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+              {isFaculty ? 'No courses created yet' : 'No courses available'}
+            </h3>
             <p className="text-gray-500 mb-6">
               {searchTerm || selectedCategory !== 'all' || selectedDifficulty !== 'all'
                 ? "No courses match your search criteria. Try adjusting your filters."
                 : isFaculty 
-                  ? "You haven't created any courses yet"
-                  : "No courses are available"}
+                  ? "Create your first course to start teaching"
+                  : "Join courses using access codes provided by your instructors"}
             </p>
             {isFaculty && !searchTerm && selectedCategory === 'all' && selectedDifficulty === 'all' && (
               <Button
@@ -331,6 +361,7 @@ interface CourseCardProps {
   course: Course;
   isFaculty: boolean;
   currentUserId?: string;
+  isEnrolled: boolean;
   onDelete: (courseId: string) => void;
   onManage: (courseId: string) => void;
   onView: (courseId: string) => void;
@@ -341,18 +372,24 @@ const CourseCard: React.FC<CourseCardProps> = ({
   course, 
   isFaculty, 
   currentUserId, 
+  isEnrolled,
   onDelete, 
   onManage, 
   onView,
   viewMode 
 }) => {
-  const isOwner = isFaculty && course.createdBy.id === currentUserId;
+  const isOwner = isFaculty && (course.createdBy.id === currentUserId || course.createdBy._id === currentUserId);
 
   const handleMainAction = () => {
-    if (isFaculty) {
-      onManage(course.id);
+    if (isFaculty || isEnrolled) {
+      if (isFaculty) {
+        onManage(course.id);
+      } else {
+        onView(course.id);
+      }
     } else {
-      onView(course.id);
+      // Student not enrolled - show info but don't navigate
+      alert('Please join this course using the access code to view its content.');
     }
   };
 
@@ -380,7 +417,18 @@ const CourseCard: React.FC<CourseCardProps> = ({
             <div className="flex-1 min-w-0">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
-                  <h3 className="font-semibold text-lg text-gray-900 mb-1">{course.title}</h3>
+                  <div className="flex items-center gap-2 mb-1">
+                    <h3 className="font-semibold text-lg text-gray-900">{course.title}</h3>
+                    {!isFaculty && (
+                      <span className={`text-xs px-2 py-1 rounded-full ${
+                        isEnrolled 
+                          ? 'bg-success-100 text-success-700' 
+                          : 'bg-amber-100 text-amber-700'
+                      }`}>
+                        {isEnrolled ? 'Enrolled' : 'Not Enrolled'}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-gray-500 text-sm mb-2 line-clamp-2">{course.description}</p>
                   
                   <div className="flex items-center space-x-4 text-sm text-gray-500 mb-3">
@@ -392,9 +440,12 @@ const CourseCard: React.FC<CourseCardProps> = ({
                       <Calendar className="h-4 w-4 mr-1" />
                       {formatDate(course.updatedAt)}
                     </div>
-                    <span className="bg-primary-100 text-primary-800 text-xs px-2 py-1 rounded-full">
-                      {course.accessCode}
-                    </span>
+                    {/* Only show access code to faculty for their own courses */}
+                    {isOwner && (
+                      <span className="bg-primary-100 text-primary-800 text-xs px-2 py-1 rounded-full font-mono">
+                        {course.accessCode}
+                      </span>
+                    )}
                   </div>
                   
                   <div className="flex items-center justify-between">
@@ -414,11 +465,11 @@ const CourseCard: React.FC<CourseCardProps> = ({
                 <div className="flex space-x-2 ml-4">
                   <Button
                     onClick={handleMainAction}
-                    variant="primary"
+                    variant={isEnrolled || isFaculty ? "primary" : "outline"}
                     size="sm"
                     icon={<Eye className="h-4 w-4" />}
                   >
-                    {isFaculty ? 'Manage' : 'View'}
+                    {isFaculty ? 'Manage' : isEnrolled ? 'View' : 'Join Required'}
                   </Button>
                   
                   {isOwner && (
@@ -441,10 +492,12 @@ const CourseCard: React.FC<CourseCardProps> = ({
     );
   }
 
-  // Grid view (original card design)
+  // Grid view
   return (
-    <Card className="transition-all duration-200 h-full flex flex-col animate-fade-in hover:shadow-lg cursor-pointer"
-          onClick={handleMainAction}>
+    <Card className={`transition-all duration-200 h-full flex flex-col animate-fade-in hover:shadow-lg ${
+      isEnrolled || isFaculty ? 'cursor-pointer' : 'cursor-default'
+    }`}
+          onClick={isEnrolled || isFaculty ? handleMainAction : undefined}>
       {course.coverImage && (
         <div className="aspect-video w-full overflow-hidden">
           <img 
@@ -457,7 +510,18 @@ const CourseCard: React.FC<CourseCardProps> = ({
       
       <CardContent className="flex-grow flex flex-col p-6">
         <div className="flex-grow">
-          <h3 className="font-semibold text-lg mb-2 text-gray-900">{course.title}</h3>
+          <div className="flex items-start justify-between mb-2">
+            <h3 className="font-semibold text-lg text-gray-900 line-clamp-2 flex-1">{course.title}</h3>
+            {!isFaculty && (
+              <span className={`text-xs px-2 py-1 rounded-full ml-2 flex-shrink-0 ${
+                isEnrolled 
+                  ? 'bg-success-100 text-success-700' 
+                  : 'bg-amber-100 text-amber-700'
+              }`}>
+                {isEnrolled ? 'Enrolled' : 'Join Required'}
+              </span>
+            )}
+          </div>
           <p className="text-gray-500 text-sm mb-4 line-clamp-3">{course.description}</p>
         </div>
         
@@ -484,9 +548,12 @@ const CourseCard: React.FC<CourseCardProps> = ({
                 {course.difficulty}
               </span>
             </div>
-            <div className="bg-primary-100 text-primary-800 text-xs px-2 py-1 rounded-full font-medium">
-              {course.accessCode}
-            </div>
+            {/* Only show access code to faculty for their own courses */}
+            {isOwner && (
+              <div className="bg-primary-100 text-primary-800 text-xs px-2 py-1 rounded-full font-mono">
+                {course.accessCode}
+              </div>
+            )}
           </div>
 
           {/* Creator Info */}
@@ -501,12 +568,12 @@ const CourseCard: React.FC<CourseCardProps> = ({
           <div className="flex space-x-2 pt-2" onClick={(e) => e.stopPropagation()}>
             <Button
               onClick={handleMainAction}
-              variant="primary"
+              variant={isEnrolled || isFaculty ? "primary" : "outline"}
               size="sm"
               className="flex-1"
               icon={<Eye className="h-4 w-4" />}
             >
-              {isFaculty ? 'Manage' : 'View'}
+              {isFaculty ? 'Manage' : isEnrolled ? 'View' : 'Join Required'}
             </Button>
             
             {isOwner && (

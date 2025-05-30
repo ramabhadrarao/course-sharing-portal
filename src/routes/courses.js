@@ -1,4 +1,4 @@
-// src/routes/courses.js
+// src/routes/courses.js - FIXED VERSION
 import express from 'express';
 import {
   getCourses,
@@ -28,21 +28,21 @@ router.post('/upload', protect, authorize('faculty', 'admin'), upload.single('fi
 router.post('/upload-multiple', protect, authorize('faculty', 'admin'), upload.array('files', 5), uploadFile);
 router.delete('/upload/:filename', protect, authorize('faculty', 'admin'), deleteUploadedFile);
 
+// Course enrollment routes (moved before main course routes to avoid conflicts)
+router.post('/join', protect, authorize('student'), joinCourse); // Students join with access code
+router.post('/:id/leave', protect, authorize('student'), leaveCourse); // Students leave course
+
 // Main course routes
 router
   .route('/')
-  .get(getCourses)
+  .get(protect, getCourses) // Now requires authentication
   .post(protect, authorize('faculty', 'admin'), createCourse);
 
 router
   .route('/:id')
-  .get(getCourse)
+  .get(protect, getCourse) // Now requires authentication for access control
   .put(protect, authorize('faculty', 'admin'), updateCourse)
   .delete(protect, authorize('faculty', 'admin'), deleteCourse);
-
-// Course enrollment routes
-router.post('/:id/join', protect, authorize('student'), joinCourse);
-router.post('/:id/leave', protect, authorize('student'), leaveCourse);
 
 // Course analytics (for faculty/admin)
 router.get('/:id/analytics', protect, authorize('faculty', 'admin'), getCourseAnalytics);

@@ -1,4 +1,4 @@
-// src/controllers/courses.js
+// src/controllers/courses.js - FIXED VERSION
 import Course from '../models/Course.js';
 import ErrorResponse from '../utils/errorResponse.js';
 import asyncHandler from '../middleware/async.js';
@@ -134,9 +134,9 @@ export const deleteUploadedFile = asyncHandler(async (req, res, next) => {
 
 // @desc    Get all courses
 // @route   GET /api/v1/courses
-// @access  Public
+// @access  Private (Different access based on role)
 export const getCourses = asyncHandler(async (req, res, next) => {
-  // Build query
+  // Build query based on user role
   let query = {};
   
   // Add search functionality
@@ -158,8 +158,21 @@ export const getCourses = asyncHandler(async (req, res, next) => {
     query.difficulty = req.query.difficulty;
   }
 
-  // Only show active courses for non-admin users
-  if (!req.user || req.user.role !== 'admin') {
+  // Role-based filtering
+  if (req.user) {
+    if (req.user.role === 'admin') {
+      // Admin can see all courses
+      // No additional filtering needed
+    } else if (req.user.role === 'faculty') {
+      // Faculty see only courses they created
+      query.createdBy = req.user.id;
+    } else {
+      // Students see all active courses (but content access is controlled separately)
+      // This allows them to see available courses for joining
+      query.isActive = true;
+    }
+  } else {
+    // Unauthenticated users see only active courses
     query.isActive = true;
   }
 
@@ -185,22 +198,37 @@ export const getCourses = asyncHandler(async (req, res, next) => {
 
   const total = await Course.countDocuments(query);
 
+  // Filter sensitive data based on user role
+  const filteredCourses = courses.map(course => {
+    const courseObj = course.toObject();
+    
+    // Only show access code to course owner
+    if (req.user && (req.user.role === 'admin' || course.createdBy._id.toString() === req.user.id)) {
+      // Keep access code for owner/admin
+    } else {
+      // Remove access code for others
+      delete courseObj.accessCode;
+    }
+    
+    return courseObj;
+  });
+
   res.status(200).json({
     success: true,
-    count: courses.length,
+    count: filteredCourses.length,
     total,
     pagination: {
       page,
       limit,
       pages: Math.ceil(total / limit)
     },
-    data: courses
+    data: filteredCourses
   });
 });
 
 // @desc    Get single course
 // @route   GET /api/v1/courses/:id
-// @access  Public
+// @access  Private (Access control based on enrollment/ownership)
 export const getCourse = asyncHandler(async (req, res, next) => {
   const course = await Course.findById(req.params.id)
     .populate('createdBy', 'name email')
@@ -210,20 +238,69 @@ export const getCourse = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse(`Course not found with id of ${req.params.id}`, 404));
   }
 
+  // Check access permissions
+  let hasAccess = false;
+  let canEdit = false;
+
+  if (req.user) {
+    const userId = req.user.id;
+    const isOwner = course.createdBy._id.toString() === userId;
+    const isAdmin = req.user.role === 'admin';
+    const isEnrolled = course.enrolledStudents.some(student => student._id.toString() === userId);
+
+    hasAccess = isOwner || isAdmin || isEnrolled;
+    canEdit = isOwner || isAdmin;
+
+    // For non-owners/non-enrolled students, only show basic info
+    if (!hasAccess && req.user.role === 'student') {
+      // Return limited course info for joining purposes
+      const limitedCourseInfo = {
+        _id: course._id,
+        title: course.title,
+        description: course.description,
+        shortDescription: course.shortDescription,
+        coverImage: course.coverImage,
+        category: course.category,
+        difficulty: course.difficulty,
+        createdBy: course.createdBy,
+        enrolledStudentsCount: course.enrolledStudents ? course.enrolledStudents.length : 0,
+        isActive: course.isActive,
+        createdAt: course.createdAt,
+        updatedAt: course.updatedAt,
+        // Don't include sections, access code, or other sensitive data
+        sections: [],
+        totalContent: 0
+      };
+
+      return res.status(200).json({
+        success: true,
+        data: limitedCourseInfo
+      });
+    }
+
+    // If user has access, increment view count (but not for owner)
+    if (hasAccess && !isOwner) {
+      course.analytics.totalViews += 1;
+      await course.save();
+    }
+  }
+
   // Check if course is active (unless user is admin or owner)
-  if (!course.isActive && req.user && req.user.role !== 'admin' && course.createdBy._id.toString() !== req.user.id) {
+  if (!course.isActive && !canEdit) {
     return next(new ErrorResponse('Course is not available', 404));
   }
 
-  // Increment view count (if user is not the owner)
-  if (!req.user || course.createdBy._id.toString() !== req.user.id) {
-    course.analytics.totalViews += 1;
-    await course.save();
+  // Prepare response data
+  const courseData = course.toObject();
+
+  // Only include access code for owners/admins
+  if (!canEdit) {
+    delete courseData.accessCode;
   }
 
   res.status(200).json({
     success: true,
-    data: course
+    data: courseData
   });
 });
 
@@ -312,7 +389,7 @@ export const createCourse = asyncHandler(async (req, res, next) => {
 
 // @desc    Update course
 // @route   PUT /api/v1/courses/:id
-// @access  Private (Faculty/Admin)
+// @access  Private (Faculty/Admin - Owner only)
 export const updateCourse = asyncHandler(async (req, res, next) => {
   let course = await Course.findById(req.params.id);
 
@@ -360,7 +437,7 @@ export const updateCourse = asyncHandler(async (req, res, next) => {
 
 // @desc    Delete course
 // @route   DELETE /api/v1/courses/:id
-// @access  Private (Faculty/Admin)
+// @access  Private (Faculty/Admin - Owner only)
 export const deleteCourse = asyncHandler(async (req, res, next) => {
   const course = await Course.findById(req.params.id);
 
@@ -412,34 +489,49 @@ export const deleteCourse = asyncHandler(async (req, res, next) => {
   });
 });
 
-// @desc    Join course
-// @route   POST /api/v1/courses/:id/join
+// @desc    Join course with access code
+// @route   POST /api/v1/courses/join
 // @access  Private (Student)
 export const joinCourse = asyncHandler(async (req, res, next) => {
+  const { accessCode } = req.body;
+
+  if (!accessCode) {
+    return next(new ErrorResponse('Access code is required', 400));
+  }
+
+  // Find course by access code
   const course = await Course.findOne({ 
-    _id: req.params.id,
-    accessCode: req.body.accessCode.toUpperCase()
+    accessCode: accessCode.toUpperCase().trim(),
+    isActive: true 
   });
 
   if (!course) {
-    return next(new ErrorResponse('Invalid course ID or access code', 400));
+    return next(new ErrorResponse('Invalid access code or course is not available', 400));
   }
 
-  if (!course.isActive) {
-    return next(new ErrorResponse('Course is not available for enrollment', 400));
-  }
-
+  // Check if already enrolled
   if (course.enrolledStudents.includes(req.user.id)) {
     return next(new ErrorResponse('Already enrolled in this course', 400));
   }
 
+  // Check if trying to join own course
+  if (course.createdBy.toString() === req.user.id) {
+    return next(new ErrorResponse('Cannot join your own course', 400));
+  }
+
+  // Add student to course
   course.enrolledStudents.push(req.user.id);
   await course.save();
+
+  // Return course data without sensitive information
+  await course.populate('createdBy', 'name email');
+  const courseData = course.toObject();
+  delete courseData.accessCode; // Don't send access code back
 
   res.status(200).json({
     success: true,
     message: 'Successfully joined the course',
-    data: course
+    data: courseData
   });
 });
 
@@ -469,7 +561,7 @@ export const leaveCourse = asyncHandler(async (req, res, next) => {
 
 // @desc    Add section to course
 // @route   POST /api/v1/courses/:id/sections
-// @access  Private (Faculty/Admin)
+// @access  Private (Faculty/Admin - Owner only)
 export const addSection = asyncHandler(async (req, res, next) => {
   const course = await Course.findById(req.params.id);
 
@@ -502,7 +594,7 @@ export const addSection = asyncHandler(async (req, res, next) => {
 
 // @desc    Update section
 // @route   PUT /api/v1/courses/:id/sections/:sectionId
-// @access  Private (Faculty/Admin)
+// @access  Private (Faculty/Admin - Owner only)
 export const updateSection = asyncHandler(async (req, res, next) => {
   const course = await Course.findById(req.params.id);
 
@@ -537,7 +629,7 @@ export const updateSection = asyncHandler(async (req, res, next) => {
 
 // @desc    Delete section
 // @route   DELETE /api/v1/courses/:id/sections/:sectionId
-// @access  Private (Faculty/Admin)
+// @access  Private (Faculty/Admin - Owner only)
 export const deleteSection = asyncHandler(async (req, res, next) => {
   const course = await Course.findById(req.params.id);
 
@@ -582,7 +674,7 @@ export const deleteSection = asyncHandler(async (req, res, next) => {
 
 // @desc    Add subsection to section
 // @route   POST /api/v1/courses/:id/sections/:sectionId/subsections
-// @access  Private (Faculty/Admin)
+// @access  Private (Faculty/Admin - Owner only)
 export const addSubsection = asyncHandler(async (req, res, next) => {
   const course = await Course.findById(req.params.id);
 
@@ -654,7 +746,7 @@ export const addSubsection = asyncHandler(async (req, res, next) => {
 
 // @desc    Update subsection
 // @route   PUT /api/v1/courses/:id/sections/:sectionId/subsections/:subsectionId
-// @access  Private (Faculty/Admin)
+// @access  Private (Faculty/Admin - Owner only)
 export const updateSubsection = asyncHandler(async (req, res, next) => {
   const course = await Course.findById(req.params.id);
 
@@ -727,7 +819,7 @@ export const updateSubsection = asyncHandler(async (req, res, next) => {
 
 // @desc    Delete subsection
 // @route   DELETE /api/v1/courses/:id/sections/:sectionId/subsections/:subsectionId
-// @access  Private (Faculty/Admin)
+// @access  Private (Faculty/Admin - Owner only)
 export const deleteSubsection = asyncHandler(async (req, res, next) => {
   const course = await Course.findById(req.params.id);
 

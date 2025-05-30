@@ -4,7 +4,8 @@ import {
   ArrowLeft, Edit, Trash, Plus, Settings, Users, Calendar, 
   Play, FileText, Video, Upload, ExternalLink, ChevronDown, 
   ChevronRight, Clock, BookOpen, AlertCircle, Save, X, 
-  Image as ImageIcon, Link2, Code, Type, Eye, EyeOff, MessageCircle
+  Image as ImageIcon, Link2, Code, Type, Eye, EyeOff, MessageCircle,
+  Lock, Shield
 } from 'lucide-react';
 
 import Button from '../../components/ui/Button';
@@ -42,6 +43,7 @@ const CourseDetailsPage: React.FC = () => {
     deleteSubsection,
     updateCourse,
     deleteCourse,
+    joinCourse,
     isLoading, 
     error,
     clearError
@@ -56,6 +58,10 @@ const CourseDetailsPage: React.FC = () => {
   const [editingSection, setEditingSection] = useState<string | null>(null);
   const [editingSubsection, setEditingSubsection] = useState<string | null>(null);
   const [showCourseSettings, setShowCourseSettings] = useState(false);
+  const [showJoinModal, setShowJoinModal] = useState(false);
+  const [accessCodeInput, setAccessCodeInput] = useState('');
+  const [joinError, setJoinError] = useState<string | null>(null);
+  const [isJoining, setIsJoining] = useState(false);
 
   // Form state
   const [sectionForm, setSectionForm] = useState({ title: '', description: '', order: 1 });
@@ -80,11 +86,13 @@ const CourseDetailsPage: React.FC = () => {
     difficulty: ''
   });
 
-  // Fixed user permission check - removed debug logging
+  // Permission checks
   const isFaculty = user?.role === 'faculty' || user?.role === 'admin';
   const userId = user?.id || user?._id;
   const courseCreatedById = currentCourse?.createdBy?._id || currentCourse?.createdBy?.id;
   const isOwner = isFaculty && userId === courseCreatedById;
+  const isEnrolled = currentCourse?.enrolledStudents?.includes(userId || '') || false;
+  const hasAccess = isOwner || isEnrolled;
 
   useEffect(() => {
     if (courseId) {
@@ -105,8 +113,8 @@ const CourseDetailsPage: React.FC = () => {
         difficulty: currentCourse.difficulty
       });
       
-      // Auto-expand first section if available and we're on content tab
-      if (currentCourse.sections.length > 0 && activeTab === 'content') {
+      // Auto-expand first section if user has access and we're on content tab
+      if (hasAccess && currentCourse.sections.length > 0 && activeTab === 'content') {
         setExpandedSections(new Set([currentCourse.sections[0].id]));
         
         // Auto-select first subsection if available
@@ -115,7 +123,31 @@ const CourseDetailsPage: React.FC = () => {
         }
       }
     }
-  }, [currentCourse, activeTab]);
+  }, [currentCourse, activeTab, hasAccess]);
+
+  const handleJoinCourse = async () => {
+    if (!accessCodeInput.trim()) {
+      setJoinError('Please enter an access code');
+      return;
+    }
+
+    setIsJoining(true);
+    setJoinError(null);
+
+    try {
+      await joinCourse(accessCodeInput.trim());
+      setShowJoinModal(false);
+      setAccessCodeInput('');
+      // Refresh course data to show updated enrollment
+      if (courseId) {
+        fetchCourseById(courseId);
+      }
+    } catch (error) {
+      setJoinError('Invalid access code. Please check with your instructor.');
+    } finally {
+      setIsJoining(false);
+    }
+  };
 
   const toggleSectionExpansion = (sectionId: string) => {
     const newExpanded = new Set(expandedSections);
@@ -297,6 +329,106 @@ const CourseDetailsPage: React.FC = () => {
     return null;
   }
 
+  // Show access denied if student is not enrolled
+  if (!isFaculty && !isEnrolled) {
+    return (
+      <div className="animate-fade-in max-w-4xl mx-auto">
+        <div className="mb-6">
+          <Button as={Link} to="/courses" variant="ghost" icon={<ArrowLeft className="h-5 w-5" />}>
+            Back to Courses
+          </Button>
+        </div>
+
+        <Card className="border-amber-200 bg-amber-50">
+          <CardContent className="text-center py-12">
+            <div className="flex justify-center mb-4">
+              <div className="rounded-full bg-amber-100 p-4">
+                <Lock className="h-12 w-12 text-amber-600" />
+              </div>
+            </div>
+            <h2 className="text-2xl font-bold text-gray-900 mb-4">Course Access Required</h2>
+            <p className="text-gray-600 mb-6">
+              You need to join this course to access its content. Please enter the access code provided by your instructor.
+            </p>
+            
+            {/* Course preview info */}
+            <div className="bg-white rounded-lg p-6 mb-6 border border-amber-200">
+              <h3 className="font-semibold text-lg text-gray-900 mb-2">{currentCourse.title}</h3>
+              <p className="text-gray-600 mb-4">{currentCourse.shortDescription || currentCourse.description}</p>
+              <div className="flex items-center justify-center space-x-4 text-sm text-gray-500">
+                <div className="flex items-center">
+                  <Users className="h-4 w-4 mr-1" />
+                  <span>{currentCourse.enrolledStudentsCount} students</span>
+                </div>
+                <div className="flex items-center">
+                  <Calendar className="h-4 w-4 mr-1" />
+                  <span>Created {formatDate(currentCourse.createdAt)}</span>
+                </div>
+                <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs">
+                  {currentCourse.category}
+                </span>
+                <span className="bg-secondary-100 text-secondary-700 px-2 py-1 rounded text-xs">
+                  {currentCourse.difficulty}
+                </span>
+              </div>
+            </div>
+
+            <Button
+              onClick={() => setShowJoinModal(true)}
+              size="lg"
+              icon={<BookOpen className="h-5 w-5" />}
+            >
+              Join This Course
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Join Course Modal */}
+        {showJoinModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full">
+              <h3 className="text-lg font-semibold mb-4">Join Course</h3>
+              <p className="text-gray-600 mb-4">
+                Enter the access code provided by your instructor to join "{currentCourse.title}".
+              </p>
+              
+              <div className="space-y-4">
+                <Input
+                  label="Access Code"
+                  placeholder="Enter course access code"
+                  value={accessCodeInput}
+                  onChange={(e) => setAccessCodeInput(e.target.value.toUpperCase())}
+                  error={joinError || undefined}
+                  fullWidth
+                />
+                
+                <div className="flex space-x-3 justify-end">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => {
+                      setShowJoinModal(false);
+                      setAccessCodeInput('');
+                      setJoinError(null);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={handleJoinCourse}
+                    isLoading={isJoining}
+                    icon={<BookOpen className="h-4 w-4" />}
+                  >
+                    Join Course
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="animate-fade-in max-w-7xl mx-auto">
       {/* Header */}
@@ -312,7 +444,7 @@ const CourseDetailsPage: React.FC = () => {
           </Button>
         </div>
         
-        {/* Always show buttons for faculty/admin, but enable/disable based on ownership */}
+        {/* Action buttons based on user role and ownership */}
         {isFaculty && (
           <div className="mt-4 md:mt-0 flex space-x-2">
             <Button
@@ -345,6 +477,18 @@ const CourseDetailsPage: React.FC = () => {
         </div>
       )}
 
+      {/* Enrollment status for students */}
+      {!isFaculty && isEnrolled && (
+        <div className="bg-success-50 border border-success-200 rounded-md p-3 mb-6">
+          <div className="flex items-center">
+            <Shield className="h-5 w-5 text-success-600 mr-2" />
+            <span className="text-success-800 text-sm font-medium">
+              You are enrolled in this course and have access to all content.
+            </span>
+          </div>
+        </div>
+      )}
+
       {/* Course Info Header */}
       <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
         <div className="flex items-start space-x-6">
@@ -367,11 +511,14 @@ const CourseDetailsPage: React.FC = () => {
                 <Calendar className="h-4 w-4 mr-1" />
                 <span>Updated {formatDate(currentCourse.updatedAt)}</span>
               </div>
-              <div className="flex items-center">
-                <span className="bg-primary-100 text-primary-800 px-2 py-1 rounded-full text-xs font-medium">
-                  {currentCourse.accessCode}
-                </span>
-              </div>
+              {/* Only show access code to course owner */}
+              {isOwner && (
+                <div className="flex items-center">
+                  <span className="bg-primary-100 text-primary-800 px-2 py-1 rounded-full text-xs font-medium">
+                    {currentCourse.accessCode}
+                  </span>
+                </div>
+              )}
               <div className="flex items-center space-x-2">
                 <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-xs">
                   {currentCourse.category}
@@ -435,15 +582,14 @@ const CourseDetailsPage: React.FC = () => {
                         {currentCourse.sections.length} sections • {currentCourse.totalContent} lessons
                       </p>
                     </div>
-                    {/* Always show add section button for faculty, but disable if not owner */}
-                    {isFaculty && (
+                    {/* Show add section button only to course owner */}
+                    {isOwner && (
                       <Button
                         size="sm"
                         variant="ghost"
                         onClick={() => setShowAddSection(true)}
                         icon={<Plus className="h-4 w-4" />}
-                        disabled={!isOwner}
-                        title={!isOwner ? "Only course owner can add sections" : "Add Section"}
+                        title="Add Section"
                       >
                         Add Section
                       </Button>
@@ -485,16 +631,16 @@ const CourseDetailsPage: React.FC = () => {
                                 </span>
                               </div>
                               
-                              {isFaculty && (
+                              {/* Show edit/delete buttons only to course owner */}
+                              {isOwner && (
                                 <div className="flex space-x-1 ml-2">
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       startEditingSection(section);
                                     }}
-                                    disabled={!isOwner}
-                                    className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-50"
-                                    title={!isOwner ? "Only course owner can edit" : "Edit Section"}
+                                    className="p-1 text-gray-400 hover:text-gray-600"
+                                    title="Edit Section"
                                   >
                                     <Edit className="h-3 w-3" />
                                   </button>
@@ -503,9 +649,8 @@ const CourseDetailsPage: React.FC = () => {
                                       e.stopPropagation();
                                       handleDeleteSection(section.id);
                                     }}
-                                    disabled={!isOwner}
-                                    className="p-1 text-gray-400 hover:text-error-600 disabled:opacity-50"
-                                    title={!isOwner ? "Only course owner can delete" : "Delete Section"}
+                                    className="p-1 text-gray-400 hover:text-error-600"
+                                    title="Delete Section"
                                   >
                                     <Trash className="h-3 w-3" />
                                   </button>
@@ -535,16 +680,16 @@ const CourseDetailsPage: React.FC = () => {
                                       <span className="text-sm">{subsection.title}</span>
                                     </div>
                                     
-                                    {isFaculty && (
+                                    {/* Show edit/delete buttons only to course owner */}
+                                    {isOwner && (
                                       <div className="opacity-0 group-hover:opacity-100 flex space-x-1">
                                         <button
                                           onClick={(e) => {
                                             e.stopPropagation();
                                             startEditingSubsection(subsection);
                                           }}
-                                          disabled={!isOwner}
-                                          className="p-1 text-gray-400 hover:text-gray-600 disabled:opacity-50"
-                                          title={!isOwner ? "Only course owner can edit" : "Edit Content"}
+                                          className="p-1 text-gray-400 hover:text-gray-600"
+                                          title="Edit Content"
                                         >
                                           <Edit className="h-3 w-3" />
                                         </button>
@@ -553,9 +698,8 @@ const CourseDetailsPage: React.FC = () => {
                                             e.stopPropagation();
                                             handleDeleteSubsection(section.id, subsection.id);
                                           }}
-                                          disabled={!isOwner}
-                                          className="p-1 text-gray-400 hover:text-error-600 disabled:opacity-50"
-                                          title={!isOwner ? "Only course owner can delete" : "Delete Content"}
+                                          className="p-1 text-gray-400 hover:text-error-600"
+                                          title="Delete Content"
                                         >
                                           <Trash className="h-3 w-3" />
                                         </button>
@@ -564,15 +708,15 @@ const CourseDetailsPage: React.FC = () => {
                                   </div>
                                 ))}
                                 
-                                {isFaculty && (
+                                {/* Show add content button only to course owner */}
+                                {isOwner && (
                                   <Button
                                     size="sm"
                                     variant="ghost"
                                     onClick={() => setShowAddSubsection(section.id)}
                                     icon={<Plus className="h-4 w-4" />}
                                     className="w-full mt-2"
-                                    disabled={!isOwner}
-                                    title={!isOwner ? "Only course owner can add content" : "Add Content"}
+                                    title="Add Content"
                                   >
                                     Add Content
                                   </Button>
@@ -704,7 +848,7 @@ const CourseDetailsPage: React.FC = () => {
                               >
                                 View All Quizzes
                               </Button>
-                              {isFaculty && (
+                              {isOwner && (
                                 <Button
                                   as={Link}
                                   to={`/courses/${courseId}/quizzes`}
@@ -772,7 +916,9 @@ const CourseDetailsPage: React.FC = () => {
                       </h3>
                       <p className="text-gray-500 mb-4">
                         {currentCourse.sections.length === 0 
-                          ? 'Start by adding your first section and content'
+                          ? isOwner 
+                            ? 'Start by adding your first section and content'
+                            : 'No content has been added to this course yet'
                           : 'Choose a lesson from the sidebar to start learning'}
                       </p>
                       {isOwner && currentCourse.sections.length === 0 && (
