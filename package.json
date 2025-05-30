@@ -16,7 +16,8 @@
     "lint": "eslint . --ext ts,tsx,js --report-unused-disable-directives --max-warnings 0",
     "test": "jest",
     "seed": "node src/seeder.js -i",
-    "seed:destroy": "node src/seeder.js -d"
+    "seed:destroy": "node src/seeder.js -d",
+    "setup": "npm install && npm run seed"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.3.2",

@@ -8,6 +8,8 @@ export interface Section {
   title: string;
   order: number;
   subsections: Subsection[];
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Subsection {
@@ -19,6 +21,8 @@ export interface Subsection {
   order: number;
   fileUrl?: string;
   videoUrl?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface Course {
@@ -36,8 +40,9 @@ export interface Course {
     name: string;
     email: string;
   };
-  enrolledStudents: any[];
+  enrolledStudents: number;
   sections: Section[];
+  isActive: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -52,18 +57,18 @@ interface CourseState {
   fetchCourses: () => Promise<void>;
   fetchCourseById: (id: string) => Promise<void>;
   createCourse: (courseData: CreateCourseData) => Promise<Course>;
-  updateCourse: (id: string, courseData: Partial<Course>) => Promise<void>;
+  updateCourse: (id: string, courseData: Partial<CreateCourseData>) => Promise<void>;
   deleteCourse: (id: string) => Promise<void>;
   joinCourse: (accessCode: string) => Promise<void>;
   
   // Section management
   addSection: (courseId: string, section: CreateSectionData) => Promise<void>;
-  updateSection: (courseId: string, sectionId: string, data: Partial<Section>) => Promise<void>;
+  updateSection: (courseId: string, sectionId: string, data: Partial<CreateSectionData>) => Promise<void>;
   deleteSection: (courseId: string, sectionId: string) => Promise<void>;
   
   // Subsection management
   addSubsection: (courseId: string, sectionId: string, subsection: CreateSubsectionData) => Promise<void>;
-  updateSubsection: (courseId: string, sectionId: string, subsectionId: string, data: Partial<Subsection>) => Promise<void>;
+  updateSubsection: (courseId: string, sectionId: string, subsectionId: string, data: Partial<CreateSubsectionData>) => Promise<void>;
   deleteSubsection: (courseId: string, sectionId: string, subsectionId: string) => Promise<void>;
 
   // Utility functions
@@ -104,6 +109,9 @@ const normalizeCourse = (course: any): Course => ({
     ...course.createdBy,
     id: course.createdBy._id
   },
+  enrolledStudents: Array.isArray(course.enrolledStudents) 
+    ? course.enrolledStudents.length 
+    : course.enrolledStudents || 0,
   sections: course.sections?.map((section: any) => ({
     ...section,
     id: section._id,
@@ -127,12 +135,7 @@ export const useCourseStore = create<CourseState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await axios.get(`${API_BASE_URL}/courses`);
-      const courses = response.data.data.map((course: any) => ({
-        ...normalizeCourse(course),
-        enrolledStudents: Array.isArray(course.enrolledStudents) 
-          ? course.enrolledStudents.length 
-          : course.enrolledStudents || 0
-      }));
+      const courses = response.data.data.map((course: any) => normalizeCourse(course));
       
       set({ courses, isLoading: false });
     } catch (error: any) {
@@ -146,12 +149,7 @@ export const useCourseStore = create<CourseState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const response = await axios.get(`${API_BASE_URL}/courses/${id}`);
-      const course = {
-        ...normalizeCourse(response.data.data),
-        enrolledStudents: Array.isArray(response.data.data.enrolledStudents)
-          ? response.data.data.enrolledStudents.length
-          : response.data.data.enrolledStudents || 0
-      };
+      const course = normalizeCourse(response.data.data);
       
       set({ currentCourse: course, isLoading: false });
     } catch (error: any) {
@@ -165,15 +163,14 @@ export const useCourseStore = create<CourseState>((set, get) => ({
     set({ isLoading: true, error: null });
     try {
       const payload = {
-        ...courseData,
-        coverImage: courseData.coverImage || undefined
+        title: courseData.title,
+        description: courseData.description,
+        accessCode: courseData.accessCode,
+        coverImage: courseData.coverImage || null
       };
 
       const response = await axios.post(`${API_BASE_URL}/courses`, payload);
-      const newCourse = {
-        ...normalizeCourse(response.data.data),
-        enrolledStudents: 0
-      };
+      const newCourse = normalizeCourse(response.data.data);
       
       set(state => ({ 
         courses: [...state.courses, newCourse],
@@ -190,24 +187,18 @@ export const useCourseStore = create<CourseState>((set, get) => ({
     }
   },
 
-  updateCourse: async (id: string, courseData: Partial<Course>) => {
+  updateCourse: async (id: string, courseData: Partial<CreateCourseData>) => {
     set({ isLoading: true, error: null });
     try {
-      // Clean the data before sending
       const payload = {
         title: courseData.title,
         description: courseData.description,
         accessCode: courseData.accessCode,
-        coverImage: courseData.coverImage || courseData.coverImageUrl
+        coverImage: courseData.coverImage
       };
 
       const response = await axios.put(`${API_BASE_URL}/courses/${id}`, payload);
-      const updatedCourse = {
-        ...normalizeCourse(response.data.data),
-        enrolledStudents: Array.isArray(response.data.data.enrolledStudents)
-          ? response.data.data.enrolledStudents.length
-          : response.data.data.enrolledStudents || 0
-      };
+      const updatedCourse = normalizeCourse(response.data.data);
       
       set(state => {
         const updatedCourses = state.courses.map(course => 
@@ -255,7 +246,9 @@ export const useCourseStore = create<CourseState>((set, get) => ({
     try {
       // Find course by access code first
       const coursesResponse = await axios.get(`${API_BASE_URL}/courses`);
-      const course = coursesResponse.data.data.find((c: any) => c.accessCode === accessCode);
+      const course = coursesResponse.data.data.find((c: any) => 
+        c.accessCode.toUpperCase() === accessCode.toUpperCase()
+      );
       
       if (!course) {
         throw new Error('Invalid access code');
@@ -280,25 +273,16 @@ export const useCourseStore = create<CourseState>((set, get) => ({
   addSection: async (courseId: string, sectionData: CreateSectionData) => {
     set({ isLoading: true, error: null });
     try {
-      const { currentCourse } = get();
-      if (!currentCourse) throw new Error('No current course loaded');
-
-      const newSection = {
-        ...sectionData,
-        _id: `temp_${Date.now()}`,
-        id: `temp_${Date.now()}`,
-        subsections: []
-      };
-
-      const updatedSections = [...currentCourse.sections, newSection];
+      const response = await axios.post(`${API_BASE_URL}/courses/${courseId}/sections`, sectionData);
+      const updatedCourse = normalizeCourse(response.data.data);
       
-      await get().updateCourse(courseId, { 
-        sections: updatedSections 
-      });
-      
-      // Refresh the current course
-      await get().fetchCourseById(courseId);
-      set({ isLoading: false });
+      set(state => ({
+        currentCourse: updatedCourse,
+        courses: state.courses.map(course => 
+          course._id === courseId ? updatedCourse : course
+        ),
+        isLoading: false
+      }));
     } catch (error: any) {
       const errorMessage = error.response?.data?.error || 'Failed to add section';
       set({ error: errorMessage, isLoading: false });
@@ -307,24 +291,19 @@ export const useCourseStore = create<CourseState>((set, get) => ({
     }
   },
 
-  updateSection: async (courseId: string, sectionId: string, data: Partial<Section>) => {
+  updateSection: async (courseId: string, sectionId: string, data: Partial<CreateSectionData>) => {
     set({ isLoading: true, error: null });
     try {
-      const { currentCourse } = get();
-      if (!currentCourse) throw new Error('No current course loaded');
-
-      const updatedSections = currentCourse.sections.map(section =>
-        section._id === sectionId || section.id === sectionId
-          ? { ...section, ...data }
-          : section
-      );
-
-      await get().updateCourse(courseId, { 
-        sections: updatedSections 
-      });
+      const response = await axios.put(`${API_BASE_URL}/courses/${courseId}/sections/${sectionId}`, data);
+      const updatedCourse = normalizeCourse(response.data.data);
       
-      await get().fetchCourseById(courseId);
-      set({ isLoading: false });
+      set(state => ({
+        currentCourse: updatedCourse,
+        courses: state.courses.map(course => 
+          course._id === courseId ? updatedCourse : course
+        ),
+        isLoading: false
+      }));
     } catch (error: any) {
       const errorMessage = error.response?.data?.error || 'Failed to update section';
       set({ error: errorMessage, isLoading: false });
@@ -336,19 +315,16 @@ export const useCourseStore = create<CourseState>((set, get) => ({
   deleteSection: async (courseId: string, sectionId: string) => {
     set({ isLoading: true, error: null });
     try {
-      const { currentCourse } = get();
-      if (!currentCourse) throw new Error('No current course loaded');
-
-      const updatedSections = currentCourse.sections.filter(section => 
-        section._id !== sectionId && section.id !== sectionId
-      );
-
-      await get().updateCourse(courseId, { 
-        sections: updatedSections 
-      });
+      const response = await axios.delete(`${API_BASE_URL}/courses/${courseId}/sections/${sectionId}`);
+      const updatedCourse = normalizeCourse(response.data.data);
       
-      await get().fetchCourseById(courseId);
-      set({ isLoading: false });
+      set(state => ({
+        currentCourse: updatedCourse,
+        courses: state.courses.map(course => 
+          course._id === courseId ? updatedCourse : course
+        ),
+        isLoading: false
+      }));
     } catch (error: any) {
       const errorMessage = error.response?.data?.error || 'Failed to delete section';
       set({ error: errorMessage, isLoading: false });
@@ -361,31 +337,19 @@ export const useCourseStore = create<CourseState>((set, get) => ({
   addSubsection: async (courseId: string, sectionId: string, subsectionData: CreateSubsectionData) => {
     set({ isLoading: true, error: null });
     try {
-      const { currentCourse } = get();
-      if (!currentCourse) throw new Error('No current course loaded');
-
-      const newSubsection = {
-        ...subsectionData,
-        _id: `temp_${Date.now()}`,
-        id: `temp_${Date.now()}`
-      };
-
-      const updatedSections = currentCourse.sections.map(section => {
-        if (section._id === sectionId || section.id === sectionId) {
-          return {
-            ...section,
-            subsections: [...section.subsections, newSubsection]
-          };
-        }
-        return section;
-      });
-
-      await get().updateCourse(courseId, { 
-        sections: updatedSections 
-      });
+      const response = await axios.post(
+        `${API_BASE_URL}/courses/${courseId}/sections/${sectionId}/subsections`, 
+        subsectionData
+      );
+      const updatedCourse = normalizeCourse(response.data.data);
       
-      await get().fetchCourseById(courseId);
-      set({ isLoading: false });
+      set(state => ({
+        currentCourse: updatedCourse,
+        courses: state.courses.map(course => 
+          course._id === courseId ? updatedCourse : course
+        ),
+        isLoading: false
+      }));
     } catch (error: any) {
       const errorMessage = error.response?.data?.error || 'Failed to add subsection';
       set({ error: errorMessage, isLoading: false });
@@ -394,32 +358,22 @@ export const useCourseStore = create<CourseState>((set, get) => ({
     }
   },
 
-  updateSubsection: async (courseId: string, sectionId: string, subsectionId: string, data: Partial<Subsection>) => {
+  updateSubsection: async (courseId: string, sectionId: string, subsectionId: string, data: Partial<CreateSubsectionData>) => {
     set({ isLoading: true, error: null });
     try {
-      const { currentCourse } = get();
-      if (!currentCourse) throw new Error('No current course loaded');
-
-      const updatedSections = currentCourse.sections.map(section => {
-        if (section._id === sectionId || section.id === sectionId) {
-          return {
-            ...section,
-            subsections: section.subsections.map(subsection =>
-              subsection._id === subsectionId || subsection.id === subsectionId
-                ? { ...subsection, ...data }
-                : subsection
-            )
-          };
-        }
-        return section;
-      });
-
-      await get().updateCourse(courseId, { 
-        sections: updatedSections 
-      });
+      const response = await axios.put(
+        `${API_BASE_URL}/courses/${courseId}/sections/${sectionId}/subsections/${subsectionId}`, 
+        data
+      );
+      const updatedCourse = normalizeCourse(response.data.data);
       
-      await get().fetchCourseById(courseId);
-      set({ isLoading: false });
+      set(state => ({
+        currentCourse: updatedCourse,
+        courses: state.courses.map(course => 
+          course._id === courseId ? updatedCourse : course
+        ),
+        isLoading: false
+      }));
     } catch (error: any) {
       const errorMessage = error.response?.data?.error || 'Failed to update subsection';
       set({ error: errorMessage, isLoading: false });
@@ -431,27 +385,18 @@ export const useCourseStore = create<CourseState>((set, get) => ({
   deleteSubsection: async (courseId: string, sectionId: string, subsectionId: string) => {
     set({ isLoading: true, error: null });
     try {
-      const { currentCourse } = get();
-      if (!currentCourse) throw new Error('No current course loaded');
-
-      const updatedSections = currentCourse.sections.map(section => {
-        if (section._id === sectionId || section.id === sectionId) {
-          return {
-            ...section,
-            subsections: section.subsections.filter(subsection =>
-              subsection._id !== subsectionId && subsection.id !== subsectionId
-            )
-          };
-        }
-        return section;
-      });
-
-      await get().updateCourse(courseId, { 
-        sections: updatedSections 
-      });
+      const response = await axios.delete(
+        `${API_BASE_URL}/courses/${courseId}/sections/${sectionId}/subsections/${subsectionId}`
+      );
+      const updatedCourse = normalizeCourse(response.data.data);
       
-      await get().fetchCourseById(courseId);
-      set({ isLoading: false });
+      set(state => ({
+        currentCourse: updatedCourse,
+        courses: state.courses.map(course => 
+          course._id === courseId ? updatedCourse : course
+        ),
+        isLoading: false
+      }));
     } catch (error: any) {
       const errorMessage = error.response?.data?.error || 'Failed to delete subsection';
       set({ error: errorMessage, isLoading: false });

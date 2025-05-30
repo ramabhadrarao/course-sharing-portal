@@ -31,8 +31,9 @@ mongoose.connect(process.env.MONGO_URI || 'mongodb://localhost:27017/college_cou
 
 const app = express();
 
-// Body parser
-app.use(express.json());
+// Body parser with increased limit for images
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Enable CORS with proper configuration
 app.use(cors({
@@ -83,6 +84,17 @@ app.get('/api/health', (req, res) => {
   res.status(200).json({
     success: true,
     message: 'Server is running',
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development',
+    database: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+  });
+});
+
+// API test endpoint
+app.get('/api/v1/test', (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: 'API is working properly',
     timestamp: new Date().toISOString()
   });
 });
@@ -96,7 +108,7 @@ if (process.env.NODE_ENV === 'production') {
   });
 }
 
-// Error handler
+// Error handler (must be last)
 app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
@@ -115,4 +127,12 @@ const server = app.listen(PORT, () => {
 process.on('unhandledRejection', (err) => {
   logger.error('Unhandled Rejection:', err);
   server.close(() => process.exit(1));
+});
+
+// Handle SIGTERM
+process.on('SIGTERM', () => {
+  logger.info('SIGTERM received');
+  server.close(() => {
+    logger.info('Process terminated');
+  });
 });

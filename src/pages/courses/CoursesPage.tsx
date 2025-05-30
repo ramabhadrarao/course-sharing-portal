@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Search, PlusCircle, BookmarkPlus } from 'lucide-react';
+import { Search, PlusCircle, BookmarkPlus, Edit, Trash, Eye, Users, Calendar } from 'lucide-react';
 
 import Button from '../../components/ui/Button';
 import { Card, CardContent } from '../../components/ui/Card';
@@ -11,11 +11,12 @@ import { formatDate } from '../../lib/utils';
 
 const CoursesPage: React.FC = () => {
   const { user } = useAuthStore();
-  const { courses, fetchCourses, isLoading, joinCourse, error } = useCourseStore();
+  const { courses, fetchCourses, isLoading, joinCourse, deleteCourse, error } = useCourseStore();
   const [searchTerm, setSearchTerm] = useState('');
   const [accessCode, setAccessCode] = useState('');
   const [isJoining, setIsJoining] = useState(false);
   const [joinError, setJoinError] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState<{ id: string; title: string } | null>(null);
   
   useEffect(() => {
     fetchCourses();
@@ -44,6 +45,15 @@ const CoursesPage: React.FC = () => {
       setJoinError('Invalid access code. Please try again.');
     } finally {
       setIsJoining(false);
+    }
+  };
+
+  const handleDeleteCourse = async (courseId: string) => {
+    try {
+      await deleteCourse(courseId);
+      setShowDeleteConfirm(null);
+    } catch (error) {
+      console.error('Failed to delete course:', error);
     }
   };
   
@@ -113,7 +123,13 @@ const CoursesPage: React.FC = () => {
       ) : filteredCourses.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredCourses.map((course) => (
-            <CourseCard key={course.id} course={course} />
+            <CourseCard 
+              key={course.id} 
+              course={course} 
+              isFaculty={isFaculty}
+              currentUserId={user?.id}
+              onDelete={(courseId) => setShowDeleteConfirm({ id: courseId, title: course.title })}
+            />
           ))}
         </div>
       ) : (
@@ -139,22 +155,45 @@ const CoursesPage: React.FC = () => {
           </CardContent>
         </Card>
       )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-lg p-6 max-w-md w-full">
+            <h3 className="text-lg font-semibold mb-4">Delete Course</h3>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to delete "{showDeleteConfirm.title}"? This action cannot be undone.
+            </p>
+            <div className="flex space-x-3 justify-end">
+              <Button variant="outline" onClick={() => setShowDeleteConfirm(null)}>
+                Cancel
+              </Button>
+              <Button 
+                variant="danger" 
+                onClick={() => handleDeleteCourse(showDeleteConfirm.id)}
+              >
+                Delete Course
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 interface CourseCardProps {
   course: Course;
+  isFaculty: boolean;
+  currentUserId?: string;
+  onDelete: (courseId: string) => void;
 }
 
-const CourseCard: React.FC<CourseCardProps> = ({ course }) => {
+const CourseCard: React.FC<CourseCardProps> = ({ course, isFaculty, currentUserId, onDelete }) => {
+  const isOwner = isFaculty && course.createdBy.id === currentUserId;
+
   return (
-    <Card 
-      as={Link} 
-      to={`/courses/${course.id}`}
-      hover
-      className="transition-all duration-200 h-full flex flex-col animate-fade-in"
-    >
+    <Card className="transition-all duration-200 h-full flex flex-col animate-fade-in hover:shadow-lg">
       {course.coverImageUrl && (
         <div className="aspect-video w-full overflow-hidden">
           <img 
@@ -164,24 +203,75 @@ const CourseCard: React.FC<CourseCardProps> = ({ course }) => {
           />
         </div>
       )}
-      <CardContent className="flex-grow flex flex-col">
-        <h3 className="font-semibold text-lg mb-2 text-gray-900">{course.title}</h3>
-        <p className="text-gray-500 text-sm mb-4 flex-grow">{course.description}</p>
-        
-        <div className="flex justify-between items-center mt-2">
-          <div className="flex items-center">
-            <div className="bg-gray-100 rounded-full h-8 w-8 flex items-center justify-center text-xs font-medium text-gray-600">
-              {course.createdBy.name.charAt(0)}
-            </div>
-            <span className="ml-2 text-xs text-gray-500">{course.createdBy.name}</span>
-          </div>
-          <div className="bg-primary-100 text-primary-800 text-xs px-2 py-1 rounded-full">
-            {course.enrolledStudents} students
-          </div>
+      
+      <CardContent className="flex-grow flex flex-col p-6">
+        <div className="flex-grow">
+          <h3 className="font-semibold text-lg mb-2 text-gray-900">{course.title}</h3>
+          <p className="text-gray-500 text-sm mb-4 line-clamp-3">{course.description}</p>
         </div>
         
-        <div className="text-xs text-gray-500 mt-3 pt-3 border-t border-gray-100">
-          Last updated: {formatDate(course.updatedAt)}
+        <div className="space-y-3">
+          {/* Course Stats */}
+          <div className="flex items-center justify-between text-sm text-gray-500">
+            <div className="flex items-center">
+              <Users className="h-4 w-4 mr-1" />
+              <span>{course.enrolledStudents} students</span>
+            </div>
+            <div className="flex items-center">
+              <Calendar className="h-4 w-4 mr-1" />
+              <span>{formatDate(course.updatedAt)}</span>
+            </div>
+          </div>
+
+          {/* Creator Info */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <div className="bg-gray-100 rounded-full h-8 w-8 flex items-center justify-center text-xs font-medium text-gray-600">
+                {course.createdBy.name.charAt(0)}
+              </div>
+              <span className="ml-2 text-xs text-gray-500">{course.createdBy.name}</span>
+            </div>
+            <div className="bg-primary-100 text-primary-800 text-xs px-2 py-1 rounded-full">
+              {course.accessCode}
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          <div className="flex space-x-2 pt-2">
+            <Button
+              as={Link}
+              to={`/courses/${course.id}`}
+              variant="primary"
+              size="sm"
+              className="flex-1"
+              icon={<Eye className="h-4 w-4" />}
+            >
+              {isFaculty ? 'Manage' : 'View'}
+            </Button>
+            
+            {isOwner && (
+              <>
+                <Button
+                  as={Link}
+                  to={`/courses/${course.id}`}
+                  variant="outline"
+                  size="sm"
+                  icon={<Edit className="h-4 w-4" />}
+                  title="Add Content"
+                >
+                  Content
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => onDelete(course.id)}
+                  icon={<Trash className="h-4 w-4" />}
+                  className="text-error-600 hover:text-error-700"
+                  title="Delete Course"
+                />
+              </>
+            )}
+          </div>
         </div>
       </CardContent>
     </Card>

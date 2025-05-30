@@ -3,18 +3,19 @@ import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { BookOpen, Image as ImageIcon, X, AlertCircle } from 'lucide-react';
+import { BookOpen, Image as ImageIcon, X, AlertCircle, Upload } from 'lucide-react';
 
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
-import { Card, CardContent, CardHeader, CardFooter } from '../../components/ui/Card';
+import { Card, CardContent, CardHeader } from '../../components/ui/Card';
 import { useCourseStore } from '../../stores/courseStore';
 import { generateAccessCode } from '../../lib/utils';
 
 const courseSchema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters').max(100, 'Title is too long'),
-  description: z.string().min(10, 'Description must be at least 10 characters'),
-  coverImageUrl: z.string().url('Please enter a valid URL').optional().or(z.literal('')),
+  description: z.string().min(10, 'Description must be at least 10 characters').max(1000, 'Description is too long'),
+  accessCode: z.string().min(4, 'Access code must be at least 4 characters').max(10, 'Access code is too long'),
+  coverImage: z.string().url('Please enter a valid URL').optional().or(z.literal('')),
 });
 
 type CourseFormValues = z.infer<typeof courseSchema>;
@@ -34,11 +35,12 @@ const CreateCoursePage: React.FC = () => {
   } = useForm<CourseFormValues>({
     resolver: zodResolver(courseSchema),
     defaultValues: {
-      coverImageUrl: '',
+      accessCode: generateAccessCode(),
+      coverImage: '',
     },
   });
   
-  const coverImageUrl = watch('coverImageUrl');
+  const coverImageUrl = watch('coverImage');
   
   // Handle form submission
   const onSubmit = async (data: CourseFormValues) => {
@@ -46,14 +48,11 @@ const CreateCoursePage: React.FC = () => {
     try {
       console.log('Form data:', data);
       
-      const accessCode = generateAccessCode();
-      console.log('Generated access code:', accessCode);
-      
       const courseData = {
-        title: data.title,
-        description: data.description,
-        accessCode: accessCode,
-        coverImageUrl: data.coverImageUrl || undefined
+        title: data.title.trim(),
+        description: data.description.trim(),
+        accessCode: data.accessCode.trim().toUpperCase(),
+        coverImage: data.coverImage?.trim() || undefined
       };
       
       console.log('Creating course with data:', courseData);
@@ -62,7 +61,7 @@ const CreateCoursePage: React.FC = () => {
       console.log('Course created successfully:', newCourse);
       
       // Navigate to the new course
-      navigate(`/courses/${newCourse.id || newCourse._id}`);
+      navigate(`/courses/${newCourse.id}`);
     } catch (error: any) {
       console.error('Create course error:', error);
       setCreateError(error.message || 'Failed to create course');
@@ -82,21 +81,29 @@ const CreateCoursePage: React.FC = () => {
   // Set image preview
   const handleImageChange = (url: string) => {
     console.log('Setting image URL:', url);
-    setValue('coverImageUrl', url);
+    setValue('coverImage', url, { shouldValidate: true });
     setCoverImagePreview(url);
   };
   
   // Clear image preview
   const clearImage = () => {
     console.log('Clearing image');
-    setValue('coverImageUrl', '');
+    setValue('coverImage', '', { shouldValidate: true });
     setCoverImagePreview(null);
+  };
+
+  // Generate new access code
+  const generateNewAccessCode = () => {
+    const newCode = generateAccessCode();
+    setValue('accessCode', newCode, { shouldValidate: true });
   };
   
   // Watch for changes in coverImageUrl input
   React.useEffect(() => {
     if (coverImageUrl && coverImageUrl !== coverImagePreview) {
       setCoverImagePreview(coverImageUrl);
+    } else if (!coverImageUrl && coverImagePreview) {
+      setCoverImagePreview(null);
     }
   }, [coverImageUrl]);
   
@@ -153,6 +160,29 @@ const CreateCoursePage: React.FC = () => {
                     <p className="mt-1 text-sm text-error-500">{errors.description.message}</p>
                   )}
                 </div>
+
+                <div className="flex space-x-4">
+                  <div className="flex-1">
+                    <Input
+                      label="Access Code"
+                      error={errors.accessCode?.message}
+                      placeholder="Course access code"
+                      helperText="Students will use this code to join your course"
+                      fullWidth
+                      {...register('accessCode')}
+                    />
+                  </div>
+                  <div className="flex items-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={generateNewAccessCode}
+                      className="mb-4"
+                    >
+                      Generate New
+                    </Button>
+                  </div>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -173,7 +203,7 @@ const CreateCoursePage: React.FC = () => {
                       onError={(e) => {
                         console.log('Image failed to load:', coverImagePreview);
                         setCoverImagePreview(null);
-                        setValue('coverImageUrl', '');
+                        setValue('coverImage', '', { shouldValidate: true });
                       }}
                     />
                     <button
@@ -188,16 +218,18 @@ const CreateCoursePage: React.FC = () => {
                   <div className="border-2 border-dashed border-gray-300 rounded-md p-6 text-center">
                     <ImageIcon className="h-12 w-12 text-gray-400 mx-auto mb-2" />
                     <p className="text-sm text-gray-500 mb-2">Choose a cover image</p>
+                    <p className="text-xs text-gray-400">Optional but recommended</p>
                   </div>
                 )}
                 
                 <Input
                   label="Image URL"
                   placeholder="https://example.com/image.jpg"
-                  error={errors.coverImageUrl?.message}
+                  error={errors.coverImage?.message}
+                  helperText="Enter a direct link to an image"
                   className="mt-4"
                   fullWidth
-                  {...register('coverImageUrl')}
+                  {...register('coverImage')}
                 />
               </CardContent>
             </Card>
@@ -210,7 +242,7 @@ const CreateCoursePage: React.FC = () => {
                   <button
                     key={index}
                     type="button"
-                    className="bg-gray-100 rounded-md overflow-hidden h-16 focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    className="bg-gray-100 rounded-md overflow-hidden h-16 focus:outline-none focus:ring-2 focus:ring-primary-500 hover:opacity-80 transition-opacity"
                     onClick={() => handleImageChange(url)}
                   >
                     <img
