@@ -1,4 +1,4 @@
-// src/components/CourseQuizzesSection.tsx - FIXED VERSION
+// src/components/CourseQuizzesSection.tsx - IMPROVED AND FIXED
 import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { 
@@ -35,15 +35,21 @@ const CourseQuizzesSection: React.FC<CourseQuizzesSectionProps> = ({
   } = useQuizStore();
 
   useEffect(() => {
-    if (courseId) {
+    if (courseId?.trim()) {
       clearError();
-      fetchQuizzes(courseId);
+      fetchQuizzes(courseId).catch(err => {
+        console.error('Failed to fetch quizzes:', err);
+      });
     }
   }, [courseId, fetchQuizzes, clearError]);
 
   const checkAttemptStatus = async (quizId: string) => {
-    if (!isFaculty && quizId) {
-      await fetchMyQuizAttempt(quizId);
+    if (!isFaculty && quizId?.trim()) {
+      try {
+        await fetchMyQuizAttempt(quizId);
+      } catch (err) {
+        console.error('Failed to check attempt status:', err);
+      }
     }
   };
 
@@ -58,13 +64,16 @@ const CourseQuizzesSection: React.FC<CourseQuizzesSectionProps> = ({
   if (error) {
     return (
       <div className="bg-error-50 text-error-700 p-4 rounded-md flex items-center">
-        <AlertCircle className="h-5 w-5 mr-2" />
-        {error}
+        <AlertCircle className="h-5 w-5 mr-2 flex-shrink-0" />
+        <div>
+          <p className="font-medium">Error loading quizzes</p>
+          <p className="text-sm">{error}</p>
+        </div>
       </div>
     );
   }
 
-  if (!quizzes || quizzes.length === 0) {
+  if (!Array.isArray(quizzes) || quizzes.length === 0) {
     return (
       <Card>
         <CardContent className="text-center py-8">
@@ -152,10 +161,15 @@ const QuizCard: React.FC<QuizCardProps> = ({
 
   // Safely get quiz properties with defaults
   const quizTitle = quiz?.title || 'Untitled Quiz';
-  const quizQuestions = quiz?.questions || [];
+  const quizQuestions = Array.isArray(quiz?.questions) ? quiz.questions : [];
   const quizTimeLimit = quiz?.timeLimit || 0;
   const quizCreatedAt = quiz?.createdAt || new Date().toISOString();
   const quizId = quiz?._id || '';
+
+  if (!quizId) {
+    console.warn('Quiz without ID detected:', quiz);
+    return null;
+  }
 
   return (
     <Card className="transition-all duration-200 hover:shadow-md">
@@ -167,11 +181,11 @@ const QuizCard: React.FC<QuizCardProps> = ({
             <div className="flex items-center space-x-4 text-sm text-gray-500 mb-4">
               <div className="flex items-center">
                 <MessageCircle className="h-4 w-4 mr-1" />
-                {quizQuestions.length} questions
+                {quizQuestions.length} question{quizQuestions.length !== 1 ? 's' : ''}
               </div>
               <div className="flex items-center">
                 <Clock className="h-4 w-4 mr-1" />
-                {quizTimeLimit} minutes
+                {quizTimeLimit} minute{quizTimeLimit !== 1 ? 's' : ''}
               </div>
               <div className="flex items-center">
                 <FileText className="h-4 w-4 mr-1" />
@@ -189,11 +203,11 @@ const QuizCard: React.FC<QuizCardProps> = ({
                       <span className="text-sm font-medium">Completed</span>
                     </div>
                     <div className={`px-3 py-1 rounded-full text-sm font-medium ${
-                      currentAttempt.score >= 80 ? 'bg-success-100 text-success-800' :
-                      currentAttempt.score >= 60 ? 'bg-accent-100 text-accent-800' : 
+                      (currentAttempt.score || 0) >= 80 ? 'bg-success-100 text-success-800' :
+                      (currentAttempt.score || 0) >= 60 ? 'bg-accent-100 text-accent-800' : 
                       'bg-error-100 text-error-800'
                     }`}>
-                      Score: {currentAttempt.score}%
+                      Score: {currentAttempt.score || 0}%
                     </div>
                   </div>
                 ) : (

@@ -1,4 +1,4 @@
-// src/models/Course.js
+// src/models/Course.js - FIXED VERSION
 import mongoose from 'mongoose';
 import slugify from 'slugify';
 
@@ -204,26 +204,46 @@ courseSchema.pre('save', function(next) {
 
 // Virtual for enrolled students count
 courseSchema.virtual('enrolledStudentsCount').get(function() {
-  return this.enrolledStudents.length;
+  return Array.isArray(this.enrolledStudents) ? this.enrolledStudents.length : 0;
 });
 
-// Virtual for total content count
+// FIXED: Virtual for total content count with proper null checks
 courseSchema.virtual('totalContent').get(function() {
+  if (!this.sections || !Array.isArray(this.sections)) {
+    return 0;
+  }
+  
   return this.sections.reduce((total, section) => {
+    if (!section || !section.subsections || !Array.isArray(section.subsections)) {
+      return total;
+    }
     return total + section.subsections.length;
   }, 0);
 });
 
-// Virtual for estimated duration
+// FIXED: Virtual for estimated duration with proper null checks
 courseSchema.virtual('estimatedDuration').get(function() {
+  if (!this.sections || !Array.isArray(this.sections)) {
+    return 0;
+  }
+  
   return this.sections.reduce((total, section) => {
+    if (!section || !section.subsections || !Array.isArray(section.subsections)) {
+      return total;
+    }
+    
     return total + section.subsections.reduce((sectionTotal, subsection) => {
+      if (!subsection) {
+        return sectionTotal;
+      }
+      
       // Estimate based on content type
       switch (subsection.contentType) {
         case 'video':
           return sectionTotal + (subsection.metadata?.duration || 10); // minutes
         case 'text':
-          return sectionTotal + Math.max(5, Math.ceil(subsection.content.length / 1000)); // 1 min per 1000 chars
+          const contentLength = subsection.content ? subsection.content.length : 0;
+          return sectionTotal + Math.max(5, Math.ceil(contentLength / 1000)); // 1 min per 1000 chars
         case 'file':
         case 'embed':
           return sectionTotal + 15; // 15 minutes default
