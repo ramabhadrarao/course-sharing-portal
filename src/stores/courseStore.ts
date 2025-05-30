@@ -294,33 +294,64 @@ export const useCourseStore = create<CourseState>((set, get) => ({
     }
   },
 
-  joinCourse: async (accessCode: string) => {
-    set({ isLoading: true, error: null });
-    try {
-      // Find course by access code first
-      const coursesResponse = await axios.get(`${API_BASE_URL}/courses`);
-      const course = coursesResponse.data.data.find((c: any) => 
-        c.accessCode.toUpperCase() === accessCode.toUpperCase()
-      );
+  // Updated joinCourse function for your existing courseStore.ts
+// Replace the existing joinCourse function with this improved version
+
+joinCourse: async (accessCode: string) => {
+  set({ isLoading: true, error: null });
+  
+  try {
+    // Validate input
+    if (!accessCode || !accessCode.trim()) {
+      throw new Error('Access code is required');
+    }
+
+    // Use the new join endpoint that doesn't require course ID
+    const response = await axios.post(`${API_BASE_URL}/courses/join`, { 
+      accessCode: accessCode.trim().toUpperCase() 
+    });
+    
+    if (response.data.success && response.data.data) {
+      const joinedCourse = normalizeCourse(response.data.data);
       
-      if (!course) {
-        throw new Error('Invalid access code');
-      }
+      // Update the courses list to include the newly joined course or update existing
+      set(state => {
+        const existingCourseIndex = state.courses.findIndex(
+          course => course._id === joinedCourse._id
+        );
+        
+        let updatedCourses;
+        if (existingCourseIndex >= 0) {
+          // Update existing course with new enrollment status
+          updatedCourses = state.courses.map(course => 
+            course._id === joinedCourse._id ? joinedCourse : course
+          );
+        } else {
+          // Add new course to the list
+          updatedCourses = [...state.courses, joinedCourse];
+        }
+        
+        return {
+          courses: updatedCourses,
+          isLoading: false,
+          error: null
+        };
+      });
       
-      // Join the course
-      await axios.post(`${API_BASE_URL}/courses/${course._id}/join`, { accessCode });
-      
-      // Refresh courses list
+      // Optionally refresh the complete courses list to ensure data consistency
       await get().fetchCourses();
       
-      set({ isLoading: false });
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.error || 'Failed to join course. Invalid access code.';
-      set({ error: errorMessage, isLoading: false });
-      console.error('Join course error:', error);
-      throw error;
+      return joinedCourse;
+    } else {
+      throw new Error('Invalid response format');
     }
-  },
+  } catch (error: any) {
+    const errorMessage = error.response?.data?.error || 'Failed to join course. Invalid access code.';
+    set({ error: errorMessage, isLoading: false });
+    console.error('Join course error:', error);
+    throw error;
+  }
+},
 
   leaveCourse: async (courseId: string) => {
     set({ isLoading: true, error: null });
