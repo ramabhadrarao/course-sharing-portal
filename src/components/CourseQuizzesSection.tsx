@@ -1,3 +1,4 @@
+// src/components/CourseQuizzesSection.tsx - FIXED VERSION
 import React, { useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { 
@@ -41,7 +42,7 @@ const CourseQuizzesSection: React.FC<CourseQuizzesSectionProps> = ({
   }, [courseId, fetchQuizzes, clearError]);
 
   const checkAttemptStatus = async (quizId: string) => {
-    if (!isFaculty) {
+    if (!isFaculty && quizId) {
       await fetchMyQuizAttempt(quizId);
     }
   };
@@ -63,7 +64,7 @@ const CourseQuizzesSection: React.FC<CourseQuizzesSectionProps> = ({
     );
   }
 
-  if (quizzes.length === 0) {
+  if (!quizzes || quizzes.length === 0) {
     return (
       <Card>
         <CardContent className="text-center py-8">
@@ -141,51 +142,58 @@ const QuizCard: React.FC<QuizCardProps> = ({
   const [hasCheckedAttempt, setHasCheckedAttempt] = React.useState(false);
 
   React.useEffect(() => {
-    if (!isFaculty && !hasCheckedAttempt) {
+    if (!isFaculty && !hasCheckedAttempt && quiz?._id) {
       onCheckAttempt(quiz._id);
       setHasCheckedAttempt(true);
     }
-  }, [quiz._id, isFaculty, hasCheckedAttempt, onCheckAttempt]);
+  }, [quiz?._id, isFaculty, hasCheckedAttempt, onCheckAttempt]);
 
   const hasAttempted = currentAttempt && !isFaculty;
+
+  // Safely get quiz properties with defaults
+  const quizTitle = quiz?.title || 'Untitled Quiz';
+  const quizQuestions = quiz?.questions || [];
+  const quizTimeLimit = quiz?.timeLimit || 0;
+  const quizCreatedAt = quiz?.createdAt || new Date().toISOString();
+  const quizId = quiz?._id || '';
 
   return (
     <Card className="transition-all duration-200 hover:shadow-md">
       <CardContent className="p-6">
         <div className="flex items-start justify-between">
           <div className="flex-1">
-            <h4 className="text-lg font-medium text-gray-900 mb-2">{quiz.title}</h4>
+            <h4 className="text-lg font-medium text-gray-900 mb-2">{quizTitle}</h4>
             
             <div className="flex items-center space-x-4 text-sm text-gray-500 mb-4">
               <div className="flex items-center">
                 <MessageCircle className="h-4 w-4 mr-1" />
-                {quiz.questions.length} questions
+                {quizQuestions.length} questions
               </div>
               <div className="flex items-center">
                 <Clock className="h-4 w-4 mr-1" />
-                {quiz.timeLimit} minutes
+                {quizTimeLimit} minutes
               </div>
               <div className="flex items-center">
                 <FileText className="h-4 w-4 mr-1" />
-                Created {new Date(quiz.createdAt).toLocaleDateString()}
+                Created {new Date(quizCreatedAt).toLocaleDateString()}
               </div>
             </div>
 
             {/* Quiz Status for Students */}
             {!isFaculty && (
               <div className="mb-4">
-                {hasAttempted ? (
+                {hasAttempted && currentAttempt ? (
                   <div className="flex items-center space-x-3">
                     <div className="flex items-center text-success-600">
                       <CheckCircle className="h-5 w-5 mr-1" />
                       <span className="text-sm font-medium">Completed</span>
                     </div>
                     <div className={`px-3 py-1 rounded-full text-sm font-medium ${
-                      currentAttempt!.score >= 80 ? 'bg-success-100 text-success-800' :
-                      currentAttempt!.score >= 60 ? 'bg-accent-100 text-accent-800' : 
+                      currentAttempt.score >= 80 ? 'bg-success-100 text-success-800' :
+                      currentAttempt.score >= 60 ? 'bg-accent-100 text-accent-800' : 
                       'bg-error-100 text-error-800'
                     }`}>
-                      Score: {currentAttempt!.score}%
+                      Score: {currentAttempt.score}%
                     </div>
                   </div>
                 ) : (
@@ -213,7 +221,7 @@ const QuizCard: React.FC<QuizCardProps> = ({
                 </Button>
                 <Button
                   as={Link}
-                  to={`/courses/${courseId}/quiz/${quiz._id}`}
+                  to={`/courses/${courseId}/quiz/${quizId}`}
                   variant="ghost"
                   size="sm"
                   icon={<Play className="h-4 w-4" />}
@@ -225,10 +233,10 @@ const QuizCard: React.FC<QuizCardProps> = ({
             ) : (
               // Student Actions
               <div className="flex space-x-2">
-                {hasAttempted ? (
+                {hasAttempted && currentAttempt ? (
                   <Button
                     as={Link}
-                    to={`/courses/${courseId}/quiz/${quiz._id}`}
+                    to={`/courses/${courseId}/quiz/${quizId}`}
                     variant="outline"
                     size="sm"
                     icon={<Award className="h-4 w-4" />}
@@ -238,7 +246,7 @@ const QuizCard: React.FC<QuizCardProps> = ({
                 ) : (
                   <Button
                     as={Link}
-                    to={`/courses/${courseId}/quiz/${quiz._id}`}
+                    to={`/courses/${courseId}/quiz/${quizId}`}
                     variant="primary"
                     size="sm"
                     icon={<Play className="h-4 w-4" />}

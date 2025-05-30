@@ -1,3 +1,4 @@
+// src/pages/quizzes/QuizManagementPage.tsx - FIXED VERSION
 import React, { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { 
@@ -77,59 +78,60 @@ const QuizManagementPage: React.FC = () => {
     e.preventDefault();
     if (!courseId) return;
     
-    // Validate form
-    if (!quizForm.title.trim()) {
-      alert('Quiz title is required');
-      return;
-    }
-    
-    if (quizForm.questions.length === 0) {
-      alert('At least one question is required');
-      return;
-    }
-    
-    // Validate all questions
-    for (let i = 0; i < quizForm.questions.length; i++) {
-      const question = quizForm.questions[i];
-      if (!question.text.trim()) {
-        alert(`Question ${i + 1} text is required`);
+    try {
+      // Validate form
+      if (!quizForm.title.trim()) {
+        alert('Quiz title is required');
         return;
       }
       
-      if (question.options.length < 2) {
-        alert(`Question ${i + 1} must have at least 2 options`);
+      if (!quizForm.questions || quizForm.questions.length === 0) {
+        alert('At least one question is required');
         return;
       }
       
-      const correctOptions = question.options.filter(opt => opt.isCorrect);
-      if (correctOptions.length === 0) {
-        alert(`Question ${i + 1} must have at least one correct answer`);
-        return;
-      }
-      
-      if (question.type === 'single' && correctOptions.length > 1) {
-        alert(`Single choice question ${i + 1} can only have one correct answer`);
-        return;
-      }
-      
-      // Check if all options have text
-      for (let j = 0; j < question.options.length; j++) {
-        if (!question.options[j].text.trim()) {
-          alert(`Question ${i + 1}, option ${j + 1} text is required`);
+      // Validate all questions
+      for (let i = 0; i < quizForm.questions.length; i++) {
+        const question = quizForm.questions[i];
+        if (!question.text.trim()) {
+          alert(`Question ${i + 1} text is required`);
           return;
         }
+        
+        if (!question.options || question.options.length < 2) {
+          alert(`Question ${i + 1} must have at least 2 options`);
+          return;
+        }
+        
+        const correctOptions = question.options.filter(opt => opt.isCorrect);
+        if (correctOptions.length === 0) {
+          alert(`Question ${i + 1} must have at least one correct answer`);
+          return;
+        }
+        
+        if (question.type === 'single' && correctOptions.length > 1) {
+          alert(`Single choice question ${i + 1} can only have one correct answer`);
+          return;
+        }
+        
+        // Check if all options have text
+        for (let j = 0; j < question.options.length; j++) {
+          if (!question.options[j].text.trim()) {
+            alert(`Question ${i + 1}, option ${j + 1} text is required`);
+            return;
+          }
+        }
       }
-    }
-    
-    try {
+
       await createQuiz(courseId, {
         ...quizForm,
         course: courseId
       });
       setShowCreateModal(false);
       resetForm();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to create quiz:', error);
+      // Error is already set in the store
     }
   };
 
@@ -137,23 +139,24 @@ const QuizManagementPage: React.FC = () => {
     e.preventDefault();
     if (!editingQuiz) return;
     
-    // Same validation as create
-    if (!quizForm.title.trim()) {
-      alert('Quiz title is required');
-      return;
-    }
-    
-    if (quizForm.questions.length === 0) {
-      alert('At least one question is required');
-      return;
-    }
-    
     try {
+      // Same validation as create
+      if (!quizForm.title.trim()) {
+        alert('Quiz title is required');
+        return;
+      }
+      
+      if (!quizForm.questions || quizForm.questions.length === 0) {
+        alert('At least one question is required');
+        return;
+      }
+      
       await updateQuiz(editingQuiz, quizForm);
       setEditingQuiz(null);
       resetForm();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to update quiz:', error);
+      // Error is already set in the store
     }
   };
 
@@ -161,8 +164,9 @@ const QuizManagementPage: React.FC = () => {
     try {
       await deleteQuiz(quizId);
       setShowDeleteConfirm(null);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to delete quiz:', error);
+      // Error is already set in the store
     }
   };
 
@@ -172,17 +176,20 @@ const QuizManagementPage: React.FC = () => {
   };
 
   const startEditingQuiz = (quiz: any) => {
-    setQuizForm({
-      title: quiz.title,
-      timeLimit: quiz.timeLimit,
-      questions: quiz.questions.map((q: any) => ({
-        text: q.text,
-        type: q.type,
-        options: q.options.map((o: any) => ({
-          text: o.text,
-          isCorrect: o.isCorrect
-        }))
+    // Safely handle quiz data structure
+    const questions = (quiz.questions || []).map((q: any) => ({
+      text: q.text || '',
+      type: q.type || 'single',
+      options: (q.options || []).map((o: any) => ({
+        text: o.text || '',
+        isCorrect: Boolean(o.isCorrect)
       }))
+    }));
+
+    setQuizForm({
+      title: quiz.title || '',
+      timeLimit: quiz.timeLimit || 30,
+      questions: questions
     });
     setEditingQuiz(quiz._id);
   };
@@ -334,7 +341,7 @@ const QuizManagementPage: React.FC = () => {
         <div className="flex justify-center py-12">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-600"></div>
         </div>
-      ) : quizzes.length > 0 ? (
+      ) : (quizzes && quizzes.length > 0) ? (
         <div className="grid gap-6">
           {quizzes.map((quiz) => (
             <Card key={quiz._id} className="transition-shadow hover:shadow-md">
@@ -344,7 +351,7 @@ const QuizManagementPage: React.FC = () => {
                   <div className="flex items-center space-x-4 mt-2 text-sm text-gray-500">
                     <div className="flex items-center">
                       <MessageCircle className="h-4 w-4 mr-1" />
-                      {quiz.questions.length} questions
+                      {quiz.questions?.length || 0} questions
                     </div>
                     <div className="flex items-center">
                       <Clock className="h-4 w-4 mr-1" />
@@ -392,13 +399,13 @@ const QuizManagementPage: React.FC = () => {
               
               <CardContent>
                 <div className="space-y-4">
-                  {quiz.questions.slice(0, 2).map((question, index) => (
+                  {(quiz.questions || []).slice(0, 2).map((question, index) => (
                     <div key={index} className="border border-gray-200 rounded-md p-4">
                       <h4 className="font-medium text-gray-900 mb-2">
                         Q{index + 1}: {question.text}
                       </h4>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                        {question.options.map((option, optionIndex) => (
+                        {(question.options || []).map((option, optionIndex) => (
                           <div 
                             key={optionIndex}
                             className={`flex items-center p-2 rounded text-sm ${
@@ -422,9 +429,9 @@ const QuizManagementPage: React.FC = () => {
                     </div>
                   ))}
                   
-                  {quiz.questions.length > 2 && (
+                  {(quiz.questions?.length || 0) > 2 && (
                     <div className="text-center py-2 text-gray-500 text-sm">
-                      ... and {quiz.questions.length - 2} more questions
+                      ... and {(quiz.questions?.length || 0) - 2} more questions
                     </div>
                   )}
                 </div>

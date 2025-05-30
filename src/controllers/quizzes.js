@@ -1,4 +1,4 @@
-// src/controllers/quizzes.js
+// src/controllers/quizzes.js - FIXED VERSION
 import Quiz from '../models/Quiz.js';
 import QuizAttempt from '../models/QuizAttempt.js';
 import Course from '../models/Course.js';
@@ -18,7 +18,7 @@ export const getQuizzes = asyncHandler(async (req, res, next) => {
   // Check access permissions
   const isOwner = course.createdBy.toString() === req.user.id;
   const isAdmin = req.user.role === 'admin';
-  const isEnrolled = course.enrolledStudents.includes(req.user.id);
+  const isEnrolled = course.enrolledStudents && course.enrolledStudents.includes(req.user.id);
   
   if (!isOwner && !isAdmin && !isEnrolled) {
     return next(new ErrorResponse('Not authorized to access this course', 401));
@@ -50,7 +50,7 @@ export const getQuiz = asyncHandler(async (req, res, next) => {
   const course = quiz.course;
   const isOwner = course.createdBy.toString() === req.user.id;
   const isAdmin = req.user.role === 'admin';
-  const isEnrolled = course.enrolledStudents.includes(req.user.id);
+  const isEnrolled = course.enrolledStudents && course.enrolledStudents.includes(req.user.id);
   
   if (!isOwner && !isAdmin && !isEnrolled) {
     return next(new ErrorResponse('Not authorized to access this quiz', 401));
@@ -125,15 +125,21 @@ export const createQuiz = asyncHandler(async (req, res, next) => {
     }
   }
 
+  // Set course ID
   req.body.course = req.params.courseId;
 
-  const quiz = await Quiz.create(req.body);
-  await quiz.populate('course', 'title');
+  try {
+    const quiz = await Quiz.create(req.body);
+    await quiz.populate('course', 'title');
 
-  res.status(201).json({
-    success: true,
-    data: quiz
-  });
+    res.status(201).json({
+      success: true,
+      data: quiz
+    });
+  } catch (error) {
+    console.error('Quiz creation error:', error);
+    return next(new ErrorResponse('Failed to create quiz', 500));
+  }
 });
 
 // @desc    Update quiz
@@ -186,6 +192,14 @@ export const updateQuiz = asyncHandler(async (req, res, next) => {
       if (question.type === 'single' && correctOptions.length > 1) {
         return next(new ErrorResponse(`Single choice question ${i + 1} can only have one correct answer`, 400));
       }
+      
+      // Validate options
+      for (let j = 0; j < question.options.length; j++) {
+        const option = question.options[j];
+        if (!option.text || !option.text.trim()) {
+          return next(new ErrorResponse(`Question ${i + 1}, option ${j + 1} text is required`, 400));
+        }
+      }
     }
   }
   
@@ -193,15 +207,20 @@ export const updateQuiz = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse('Time limit must be at least 1 minute', 400));
   }
 
-  quiz = await Quiz.findByIdAndUpdate(req.params.id, req.body, {
-    new: true,
-    runValidators: true
-  }).populate('course', 'title');
+  try {
+    quiz = await Quiz.findByIdAndUpdate(req.params.id, req.body, {
+      new: true,
+      runValidators: true
+    }).populate('course', 'title');
 
-  res.status(200).json({
-    success: true,
-    data: quiz
-  });
+    res.status(200).json({
+      success: true,
+      data: quiz
+    });
+  } catch (error) {
+    console.error('Quiz update error:', error);
+    return next(new ErrorResponse('Failed to update quiz', 500));
+  }
 });
 
 // @desc    Delete quiz
@@ -222,15 +241,20 @@ export const deleteQuiz = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse('Not authorized to delete this quiz', 401));
   }
 
-  // Delete all quiz attempts first
-  await QuizAttempt.deleteMany({ quiz: req.params.id });
+  try {
+    // Delete all quiz attempts first
+    await QuizAttempt.deleteMany({ quiz: req.params.id });
 
-  await quiz.deleteOne();
+    await quiz.deleteOne();
 
-  res.status(200).json({
-    success: true,
-    data: {}
-  });
+    res.status(200).json({
+      success: true,
+      data: {}
+    });
+  } catch (error) {
+    console.error('Quiz deletion error:', error);
+    return next(new ErrorResponse('Failed to delete quiz', 500));
+  }
 });
 
 // @desc    Submit quiz attempt
@@ -247,7 +271,7 @@ export const submitQuizAttempt = asyncHandler(async (req, res, next) => {
   const course = quiz.course;
   const isOwner = course.createdBy.toString() === req.user.id;
   const isAdmin = req.user.role === 'admin';
-  const isEnrolled = course.enrolledStudents.includes(req.user.id);
+  const isEnrolled = course.enrolledStudents && course.enrolledStudents.includes(req.user.id);
   
   if (!isOwner && !isAdmin && !isEnrolled) {
     return next(new ErrorResponse('Not authorized to take this quiz', 401));
@@ -317,23 +341,28 @@ export const submitQuizAttempt = asyncHandler(async (req, res, next) => {
 
   const score = Math.round((correctAnswers / quiz.questions.length) * 100);
 
-  const attempt = await QuizAttempt.create({
-    quiz: req.params.id,
-    student: req.user.id,
-    answers: answers,
-    score: score,
-    completedAt: Date.now()
-  });
+  try {
+    const attempt = await QuizAttempt.create({
+      quiz: req.params.id,
+      student: req.user.id,
+      answers: answers,
+      score: score,
+      completedAt: Date.now()
+    });
 
-  await attempt.populate([
-    { path: 'quiz', select: 'title' },
-    { path: 'student', select: 'name email' }
-  ]);
+    await attempt.populate([
+      { path: 'quiz', select: 'title' },
+      { path: 'student', select: 'name email' }
+    ]);
 
-  res.status(201).json({
-    success: true,
-    data: attempt
-  });
+    res.status(201).json({
+      success: true,
+      data: attempt
+    });
+  } catch (error) {
+    console.error('Quiz attempt submission error:', error);
+    return next(new ErrorResponse('Failed to submit quiz attempt', 500));
+  }
 });
 
 // @desc    Get quiz attempts for a quiz
@@ -380,7 +409,7 @@ export const getMyQuizAttempt = asyncHandler(async (req, res, next) => {
   const course = quiz.course;
   const isOwner = course.createdBy.toString() === req.user.id;
   const isAdmin = req.user.role === 'admin';
-  const isEnrolled = course.enrolledStudents.includes(req.user.id);
+  const isEnrolled = course.enrolledStudents && course.enrolledStudents.includes(req.user.id);
   
   if (!isOwner && !isAdmin && !isEnrolled) {
     return next(new ErrorResponse('Not authorized to access this quiz', 401));
