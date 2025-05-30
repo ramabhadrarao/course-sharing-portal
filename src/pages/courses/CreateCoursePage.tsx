@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { BookOpen, Image as ImageIcon, X } from 'lucide-react';
+import { BookOpen, Image as ImageIcon, X, AlertCircle } from 'lucide-react';
 
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
@@ -14,15 +14,16 @@ import { generateAccessCode } from '../../lib/utils';
 const courseSchema = z.object({
   title: z.string().min(3, 'Title must be at least 3 characters').max(100, 'Title is too long'),
   description: z.string().min(10, 'Description must be at least 10 characters'),
-  coverImageUrl: z.string().url('Please enter a valid URL').optional(),
+  coverImageUrl: z.string().url('Please enter a valid URL').optional().or(z.literal('')),
 });
 
 type CourseFormValues = z.infer<typeof courseSchema>;
 
 const CreateCoursePage: React.FC = () => {
   const navigate = useNavigate();
-  const { createCourse, isLoading } = useCourseStore();
+  const { createCourse, isLoading, error } = useCourseStore();
   const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
+  const [createError, setCreateError] = useState<string | null>(null);
   
   const {
     register,
@@ -41,15 +42,30 @@ const CreateCoursePage: React.FC = () => {
   
   // Handle form submission
   const onSubmit = async (data: CourseFormValues) => {
+    setCreateError(null);
     try {
+      console.log('Form data:', data);
+      
       const accessCode = generateAccessCode();
-      const newCourse = await createCourse({
-        ...data,
-        accessCode,
-      });
-      navigate(`/courses/${newCourse.id}`);
-    } catch (error) {
-      // Error is handled by the store
+      console.log('Generated access code:', accessCode);
+      
+      const courseData = {
+        title: data.title,
+        description: data.description,
+        accessCode: accessCode,
+        coverImageUrl: data.coverImageUrl || undefined
+      };
+      
+      console.log('Creating course with data:', courseData);
+      
+      const newCourse = await createCourse(courseData);
+      console.log('Course created successfully:', newCourse);
+      
+      // Navigate to the new course
+      navigate(`/courses/${newCourse.id || newCourse._id}`);
+    } catch (error: any) {
+      console.error('Create course error:', error);
+      setCreateError(error.message || 'Failed to create course');
     }
   };
   
@@ -65,15 +81,24 @@ const CreateCoursePage: React.FC = () => {
   
   // Set image preview
   const handleImageChange = (url: string) => {
+    console.log('Setting image URL:', url);
     setValue('coverImageUrl', url);
     setCoverImagePreview(url);
   };
   
   // Clear image preview
   const clearImage = () => {
+    console.log('Clearing image');
     setValue('coverImageUrl', '');
     setCoverImagePreview(null);
   };
+  
+  // Watch for changes in coverImageUrl input
+  React.useEffect(() => {
+    if (coverImageUrl && coverImageUrl !== coverImagePreview) {
+      setCoverImagePreview(coverImageUrl);
+    }
+  }, [coverImageUrl]);
   
   return (
     <div className="max-w-4xl mx-auto animate-fade-in">
@@ -83,6 +108,17 @@ const CreateCoursePage: React.FC = () => {
           Create a new course to share with your students
         </p>
       </div>
+      
+      {/* Display any creation errors */}
+      {(error || createError) && (
+        <div className="bg-error-50 text-error-700 p-4 rounded-md mb-6 flex items-start">
+          <AlertCircle className="h-5 w-5 mr-2 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="font-medium">Error creating course</p>
+            <p className="text-sm mt-1">{error || createError}</p>
+          </div>
+        </div>
+      )}
       
       <form onSubmit={handleSubmit(onSubmit)}>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -134,6 +170,11 @@ const CreateCoursePage: React.FC = () => {
                       src={coverImagePreview} 
                       alt="Cover preview" 
                       className="w-full h-40 object-cover rounded-md"
+                      onError={(e) => {
+                        console.log('Image failed to load:', coverImagePreview);
+                        setCoverImagePreview(null);
+                        setValue('coverImageUrl', '');
+                      }}
                     />
                     <button
                       type="button"
@@ -190,6 +231,7 @@ const CreateCoursePage: React.FC = () => {
             type="button"
             variant="outline"
             onClick={() => navigate('/courses')}
+            disabled={isLoading}
           >
             Cancel
           </Button>
