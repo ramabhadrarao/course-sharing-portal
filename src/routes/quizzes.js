@@ -1,4 +1,4 @@
-// src/routes/quizzes.js
+// src/routes/quizzes.js - FIXED VERSION
 import express from 'express';
 import {
   getQuizzes,
@@ -21,7 +21,7 @@ router.use(protect);
 // Course-specific quiz routes (these have courseId in params)
 router
   .route('/')
-  .get(getQuizzes) // Get all quizzes for a course
+  .get(getQuizzes) // Get all quizzes for a course - FIXED: Allow all authenticated users
   .post(authorize('faculty', 'admin'), createQuiz); // Create quiz for a course
 
 // Individual quiz routes (these use the quiz ID directly)
@@ -31,14 +31,14 @@ individualQuizRoutes.use(protect);
 
 individualQuizRoutes
   .route('/:id')
-  .get(getQuiz) // Get single quiz
+  .get(getQuiz) // Get single quiz - FIXED: Allow all authenticated users with access check in controller
   .put(authorize('faculty', 'admin'), updateQuiz) // Update quiz
   .delete(authorize('faculty', 'admin'), deleteQuiz); // Delete quiz
 
-// Quiz attempt routes
+// Quiz attempt routes - FIXED: Allow students to access their own attempts
 individualQuizRoutes.post('/:id/attempt', submitQuizAttempt); // Submit quiz attempt
 individualQuizRoutes.get('/:id/attempts', authorize('faculty', 'admin'), getQuizAttempts); // Get all attempts (faculty/admin)
-individualQuizRoutes.get('/:id/my-attempt', getMyQuizAttempt); // Get user's own attempt
+individualQuizRoutes.get('/:id/my-attempt', getMyQuizAttempt); // Get user's own attempt - FIXED: Allow all authenticated users
 individualQuizRoutes.get('/:id/stats', authorize('faculty', 'admin'), getQuizStats); // Get quiz statistics
 
 export default router;

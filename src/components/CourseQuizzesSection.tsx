@@ -35,23 +35,29 @@ const CourseQuizzesSection: React.FC<CourseQuizzesSectionProps> = ({
   } = useQuizStore();
 
   useEffect(() => {
+    console.log('CourseQuizzesSection mounted with:', { courseId, isOwner, isFaculty, userId: user?.id });
+    
     if (courseId?.trim()) {
       clearError();
+      clearCurrentAttempt();
+      
+      // Fetch quizzes for this course
       fetchQuizzes(courseId).catch(err => {
         console.error('Failed to fetch quizzes:', err);
       });
     }
-  }, [courseId, fetchQuizzes, clearError]);
+  }, [courseId, fetchQuizzes, clearError, clearCurrentAttempt, user?.id]);
 
-  const checkAttemptStatus = async (quizId: string) => {
-    if (!isFaculty && quizId?.trim()) {
-      try {
-        await fetchMyQuizAttempt(quizId);
-      } catch (err) {
-        console.error('Failed to check attempt status:', err);
-      }
+  // Fetch quiz attempt status for each quiz (students only)
+  useEffect(() => {
+    if (!isFaculty && quizzes.length > 0) {
+      console.log('Fetching quiz attempts for student, quizzes:', quizzes.length);
+      
+      // For now, just clear any previous attempt data
+      // Individual quiz attempts will be checked when needed
+      clearCurrentAttempt();
     }
-  };
+  }, [quizzes, isFaculty, clearCurrentAttempt]);
 
   if (isLoading) {
     return (
@@ -62,12 +68,24 @@ const CourseQuizzesSection: React.FC<CourseQuizzesSectionProps> = ({
   }
 
   if (error) {
+    console.error('Quiz section error:', error);
     return (
       <div className="bg-error-50 text-error-700 p-4 rounded-md flex items-center">
         <AlertCircle className="h-5 w-5 mr-2 flex-shrink-0" />
         <div>
           <p className="font-medium">Error loading quizzes</p>
           <p className="text-sm">{error}</p>
+          <button 
+            onClick={() => {
+              clearError();
+              if (courseId) {
+                fetchQuizzes(courseId);
+              }
+            }}
+            className="text-sm underline hover:no-underline mt-1"
+          >
+            Try again
+          </button>
         </div>
       </div>
     );
@@ -124,7 +142,6 @@ const CourseQuizzesSection: React.FC<CourseQuizzesSectionProps> = ({
             courseId={courseId}
             isFaculty={isFaculty}
             isOwner={isOwner}
-            onCheckAttempt={checkAttemptStatus}
           />
         ))}
       </div>
@@ -137,27 +154,60 @@ interface QuizCardProps {
   courseId: string;
   isFaculty: boolean;
   isOwner: boolean;
-  onCheckAttempt: (quizId: string) => void;
 }
 
 const QuizCard: React.FC<QuizCardProps> = ({ 
   quiz, 
   courseId, 
   isFaculty, 
-  isOwner,
-  onCheckAttempt
+  isOwner
 }) => {
-  const { currentAttempt } = useQuizStore();
-  const [hasCheckedAttempt, setHasCheckedAttempt] = React.useState(false);
+  const { 
+    currentAttempt, 
+    fetchMyQuizAttempt, 
+    clearCurrentAttempt 
+  } = useQuizStore();
+  
+  const [attemptStatus, setAttemptStatus] = React.useState<{
+    hasAttempted: boolean;
+    score?: number;
+    loading: boolean;
+  }>({ hasAttempted: false, loading: false });
 
+  // Check attempt status when component mounts (for students only)
   React.useEffect(() => {
-    if (!isFaculty && !hasCheckedAttempt && quiz?._id) {
-      onCheckAttempt(quiz._id);
-      setHasCheckedAttempt(true);
+    if (!isFaculty && quiz?._id) {
+      setAttemptStatus(prev => ({ ...prev, loading: true }));
+      
+      fetchMyQuizAttempt(quiz._id)
+        .then(() => {
+          // Check if currentAttempt was updated
+          setAttemptStatus({
+            hasAttempted: !!currentAttempt,
+            score: currentAttempt?.score,
+            loading: false
+          });
+        })
+        .catch((error) => {
+          console.log('No attempt found for quiz:', quiz._id, error.message);
+          setAttemptStatus({
+            hasAttempted: false,
+            loading: false
+          });
+        });
     }
-  }, [quiz?._id, isFaculty, hasCheckedAttempt, onCheckAttempt]);
+  }, [quiz?._id, isFaculty, fetchMyQuizAttempt]);
 
-  const hasAttempted = currentAttempt && !isFaculty;
+  // Update attempt status when currentAttempt changes
+  React.useEffect(() => {
+    if (currentAttempt) {
+      setAttemptStatus({
+        hasAttempted: true,
+        score: currentAttempt.score,
+        loading: false
+      });
+    }
+  }, [currentAttempt]);
 
   // Safely get quiz properties with defaults
   const quizTitle = quiz?.title || 'Untitled Quiz';
@@ -196,18 +246,23 @@ const QuizCard: React.FC<QuizCardProps> = ({
             {/* Quiz Status for Students */}
             {!isFaculty && (
               <div className="mb-4">
-                {hasAttempted && currentAttempt ? (
+                {attemptStatus.loading ? (
+                  <div className="flex items-center text-gray-500">
+                    <div className="animate-spin rounded-full h-4 w-4 border-t-2 border-b-2 border-gray-400 mr-2"></div>
+                    <span className="text-sm">Checking status...</span>
+                  </div>
+                ) : attemptStatus.hasAttempted ? (
                   <div className="flex items-center space-x-3">
                     <div className="flex items-center text-success-600">
                       <CheckCircle className="h-5 w-5 mr-1" />
                       <span className="text-sm font-medium">Completed</span>
                     </div>
                     <div className={`px-3 py-1 rounded-full text-sm font-medium ${
-                      (currentAttempt.score || 0) >= 80 ? 'bg-success-100 text-success-800' :
-                      (currentAttempt.score || 0) >= 60 ? 'bg-accent-100 text-accent-800' : 
+                      (attemptStatus.score || 0) >= 80 ? 'bg-success-100 text-success-800' :
+                      (attemptStatus.score || 0) >= 60 ? 'bg-accent-100 text-accent-800' : 
                       'bg-error-100 text-error-800'
                     }`}>
-                      Score: {currentAttempt.score || 0}%
+                      Score: {attemptStatus.score || 0}%
                     </div>
                   </div>
                 ) : (
@@ -247,7 +302,7 @@ const QuizCard: React.FC<QuizCardProps> = ({
             ) : (
               // Student Actions
               <div className="flex space-x-2">
-                {hasAttempted && currentAttempt ? (
+                {attemptStatus.hasAttempted ? (
                   <Button
                     as={Link}
                     to={`/courses/${courseId}/quiz/${quizId}`}

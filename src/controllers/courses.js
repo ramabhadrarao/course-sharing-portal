@@ -135,6 +135,12 @@ export const deleteUploadedFile = asyncHandler(async (req, res, next) => {
 // @desc    Get all courses
 // @route   GET /api/v1/courses
 // @access  Private (Different access based on role)
+// @desc    Get all courses
+// @route   GET /api/v1/courses
+// @access  Private (Different access based on role)
+// @desc    Get all courses
+// @route   GET /api/v1/courses
+// @access  Private (Different access based on role)
 export const getCourses = asyncHandler(async (req, res, next) => {
   // Build query based on user role
   let query = {};
@@ -164,8 +170,9 @@ export const getCourses = asyncHandler(async (req, res, next) => {
       // Admin can see all courses
       // No additional filtering needed
     } else if (req.user.role === 'faculty') {
-      // Faculty see only courses they created
-      query.createdBy = req.user.id;
+      // Faculty see ALL courses (not just their own) - filtering happens on frontend
+      // This allows faculty to see courses for collaboration/reference
+      // No additional filtering needed
     } else {
       // Students see all active courses (but content access is controlled separately)
       // This allows them to see available courses for joining
@@ -198,9 +205,16 @@ export const getCourses = asyncHandler(async (req, res, next) => {
 
   const total = await Course.countDocuments(query);
 
-  // Filter sensitive data based on user role
+  // Filter sensitive data based on user role and normalize enrolledStudents
   const filteredCourses = courses.map(course => {
     const courseObj = course.toObject();
+    
+    // Convert enrolledStudents ObjectIds to strings
+    if (courseObj.enrolledStudents) {
+      courseObj.enrolledStudents = courseObj.enrolledStudents.map(studentId => 
+        studentId.toString()
+      );
+    }
     
     // Only show access code to course owner
     if (req.user && (req.user.role === 'admin' || course.createdBy._id.toString() === req.user.id)) {
@@ -226,6 +240,9 @@ export const getCourses = asyncHandler(async (req, res, next) => {
   });
 });
 
+// @desc    Get single course
+// @route   GET /api/v1/courses/:id
+// @access  Private (Access control based on enrollment/ownership)
 // @desc    Get single course
 // @route   GET /api/v1/courses/:id
 // @access  Private (Access control based on enrollment/ownership)
@@ -292,6 +309,13 @@ export const getCourse = asyncHandler(async (req, res, next) => {
 
   // Prepare response data
   const courseData = course.toObject();
+  
+  // Convert enrolledStudents ObjectIds to strings for consistency
+  if (courseData.enrolledStudents) {
+    courseData.enrolledStudents = courseData.enrolledStudents.map(student => 
+      typeof student === 'object' && student._id ? student._id.toString() : student.toString()
+    );
+  }
 
   // Only include access code for owners/admins
   if (!canEdit) {

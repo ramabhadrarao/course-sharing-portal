@@ -425,28 +425,39 @@ export const useQuizStore = create<QuizState>((set, get) => ({
 
   fetchMyQuizAttempt: async (quizId: string) => {
     if (!quizId) {
-      set({ error: 'Quiz ID is required', isLoading: false });
+      console.log('Quiz ID is required for fetchMyQuizAttempt');
       return;
     }
 
-    set({ isLoading: true, error: null });
+    // Don't set loading state for individual quiz attempt checks
+    // set({ isLoading: true, error: null });
+    
     try {
       const response = await axios.get(`${API_BASE_URL}/quizzes/${quizId}/my-attempt`);
       
       if (response.data.success && response.data.data) {
         const attempt = normalizeQuizAttempt(response.data.data);
-        set({ currentAttempt: attempt, isLoading: false });
+        set({ currentAttempt: attempt, error: null });
+        console.log('Found quiz attempt:', attempt);
+        return attempt;
       } else {
-        set({ currentAttempt: null, isLoading: false });
+        set({ currentAttempt: null, error: null });
+        console.log('No quiz attempt found for quiz:', quizId);
+        return null;
       }
     } catch (error: any) {
       // 404 is expected if user hasn't attempted the quiz yet
       if (error.response?.status === 404) {
-        set({ currentAttempt: null, isLoading: false, error: null });
+        set({ currentAttempt: null, error: null });
+        console.log('No attempt found for quiz (404):', quizId);
+        return null;
       } else {
-        const errorMessage = error.response?.data?.error || 'Failed to fetch your quiz attempt';
-        set({ error: errorMessage, isLoading: false });
-        console.error('Fetch my quiz attempt error:', error);
+        console.error('Error fetching quiz attempt:', error);
+        // Don't set a global error for individual quiz attempt failures
+        // const errorMessage = error.response?.data?.error || 'Failed to fetch your quiz attempt';
+        // set({ error: errorMessage });
+        set({ currentAttempt: null });
+        return null;
       }
     }
   },

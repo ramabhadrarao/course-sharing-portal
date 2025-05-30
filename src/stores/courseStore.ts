@@ -160,6 +160,7 @@ interface CreateSubsectionData {
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api/v1';
 
 // Helper function to normalize course data
+// Helper function to normalize course data
 const normalizeCourse = (course: any): Course => ({
   ...course,
   id: course._id,
@@ -167,6 +168,12 @@ const normalizeCourse = (course: any): Course => ({
     ...course.createdBy,
     id: course.createdBy._id
   },
+  // Ensure enrolledStudents are strings
+  enrolledStudents: (course.enrolledStudents || []).map((studentId: any) => 
+    typeof studentId === 'object' && studentId.toString 
+      ? studentId.toString() 
+      : studentId
+  ),
   enrolledStudentsCount: Array.isArray(course.enrolledStudents) 
     ? course.enrolledStudents.length 
     : course.enrolledStudentsCount || 0,
@@ -179,7 +186,6 @@ const normalizeCourse = (course: any): Course => ({
     })) || []
   })) || []
 });
-
 export const useCourseStore = create<CourseState>((set, get) => ({
   courses: [],
   currentCourse: null,

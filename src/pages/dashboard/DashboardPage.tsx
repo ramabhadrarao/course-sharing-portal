@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { PlusCircle, BookOpen, Users, Award, Calendar, Clock, TrendingUp, Shield, Eye } from 'lucide-react';
 
 import Button from '../../components/ui/Button';
-import { Card, CardContent, CardHeader } from '../../components/ui/Card';
+import { Card, CardContent } from '../../components/ui/Card';
 import { useAuthStore } from '../../stores/authStore';
 import { useCourseStore } from '../../stores/courseStore';
 import { formatDate } from '../../lib/utils';
@@ -24,9 +24,22 @@ const DashboardPage: React.FC = () => {
     return course.createdBy.id === user?.id || course.createdBy._id === user?.id;
   };
   
-  // Helper function to check if student is enrolled in a course
+  // Helper function to check if student is enrolled in a course - FIXED ENROLLMENT DETECTION
   const isEnrolled = (course: any) => {
-    return course.enrolledStudents && course.enrolledStudents.includes(user?.id || user?._id || '');
+    if (!course.enrolledStudents) return false;
+    
+    const currentUserId = user?.id || user?._id;
+    if (!currentUserId) return false;
+    
+    // Handle both string and ObjectId formats
+    return course.enrolledStudents.some((studentId: any) => {
+      const normalizedStudentId = typeof studentId === 'object' && studentId.toString 
+        ? studentId.toString() 
+        : studentId;
+      
+      return normalizedStudentId === currentUserId || 
+             normalizedStudentId === currentUserId.toString();
+    });
   };
   
   // Get courses based on user role - FIXED LOGIC

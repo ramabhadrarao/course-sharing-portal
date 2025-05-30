@@ -44,7 +44,65 @@ const CoursesPage: React.FC = () => {
       difficulty: selectedDifficulty !== 'all' ? selectedDifficulty : undefined
     });
   }, [fetchCourses, searchTerm, selectedCategory, selectedDifficulty]);
+
+  // Debug logging to understand the data structure
+  useEffect(() => {
+    if (courses.length > 0 && user) {
+      console.log('=== COURSES PAGE DEBUG ===');
+      console.log('User ID:', user?.id || user?._id);
+      console.log('User Role:', user?.role);
+      console.log('Is Faculty:', isFaculty);
+      console.log('Total Courses:', courses.length);
+      console.log('Courses Array:', courses);
+      
+      // Check ownership for each course
+      courses.forEach((course, index) => {
+        const courseCreatorId = course.createdBy?._id || course.createdBy?.id;
+        const currentUserId = user?.id || user?._id;
+        const userIsOwner = courseCreatorId === currentUserId || courseCreatorId?.toString() === currentUserId.toString();
+        
+        console.log(`Course ${index + 1}:`, {
+          title: course.title,
+          createdBy: course.createdBy,
+          courseCreatorId,
+          currentUserId,
+          isOwner: userIsOwner
+        });
+      });
+      console.log('========================');
+    }
+  }, [courses, user, isFaculty]);
   
+  // Check if student is enrolled in a course - FIXED ENROLLMENT DETECTION
+  const isEnrolledInCourse = (course: Course) => {
+    if (isFaculty) return true; // Faculty always have access
+    
+    const currentUserId = user?.id || user?._id;
+    if (!currentUserId || !course.enrolledStudents) return false;
+    
+    // Handle both string and ObjectId formats
+    return course.enrolledStudents.some(studentId => {
+      // Convert ObjectId to string if necessary
+      const normalizedStudentId = typeof studentId === 'object' && studentId.toString 
+        ? studentId.toString() 
+        : studentId;
+      
+      return normalizedStudentId === currentUserId || 
+             normalizedStudentId === currentUserId.toString();
+    });
+  };
+  
+  // Helper function to check if user is owner of a course
+  const isOwner = (course: Course) => {
+    const currentUserId = user?.id || user?._id;
+    if (!currentUserId) return false;
+    
+    // Handle both _id and id formats for createdBy
+    const courseCreatorId = course.createdBy?._id || course.createdBy?.id;
+    
+    return courseCreatorId === currentUserId || courseCreatorId?.toString() === currentUserId.toString();
+  };
+
   // Filter courses based on user role and enrollment status
   const filteredCourses = courses.filter(course => {
     const matchesSearch = searchTerm === '' || 
@@ -58,8 +116,15 @@ const CoursesPage: React.FC = () => {
     // Role-based filtering
     if (isFaculty) {
       // Faculty/Admin see all courses they created
-      const isOwner = course.createdBy.id === user?.id || course.createdBy._id === user?.id;
-      return matchesSearch && matchesCategory && matchesDifficulty && isOwner;
+      const userIsOwner = isOwner(course);
+      console.log('Faculty filtering:', {
+        courseTitle: course.title,
+        courseCreatorId: course.createdBy?._id || course.createdBy?.id,
+        currentUserId: user?.id || user?._id,
+        isOwner: userIsOwner,
+        courseCreatedBy: course.createdBy
+      });
+      return matchesSearch && matchesCategory && matchesDifficulty && userIsOwner;
     } else {
       // Students see courses they're enrolled in + available courses for joining
       // For this view, we'll show all active courses but indicate enrollment status
@@ -111,12 +176,6 @@ const CoursesPage: React.FC = () => {
     setSelectedCategory('all');
     setSelectedDifficulty('all');
     setSearchTerm('');
-  };
-
-  // Check if student is enrolled in a course
-  const isEnrolledInCourse = (course: Course) => {
-    if (isFaculty) return true; // Faculty always have access
-    return course.enrolledStudents && course.enrolledStudents.includes(user?.id || user?._id || '');
   };
   
   return (
@@ -345,7 +404,7 @@ const CoursesPage: React.FC = () => {
               </Button>
               <Button 
                 variant="danger" 
-                onClick={() => handleDeleteConfirm(showDeleteConfirm.id)}
+                onClick={() => handleDeleteCourse(showDeleteConfirm.id)}
               >
                 Delete Course
               </Button>
